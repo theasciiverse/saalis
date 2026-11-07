@@ -182,7 +182,7 @@ RNG.
       Deferred by David 2026-11-07: decide once the space view and HUD
       designs are in place.
 - [ ] Quest format: own declarative format, or an embedded language
-      (such as Rhai)
+      (such as Rhai). Deferred by David 2026-11-07: review later.
 - [ ] Subtitle and motto, if any
 - [ ] Trademark checks (EUIPO, PRH, USPTO) before announcing
 - [ ] The general `games/CLAUDE.md` that sibling repos cite is not on
