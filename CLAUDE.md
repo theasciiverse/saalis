@@ -178,7 +178,9 @@ RNG.
 ## Open questions (David's to decide)
 
 - [ ] Confirm the reading of the Northern Reach above
-- [ ] On-foot and interior art (half-block floor plans or classic ASCII)
+- [ ] On-foot and interior art (half-block floor plans or classic ASCII).
+      Deferred by David 2026-11-07: decide once the space view and HUD
+      designs are in place.
 - [ ] Quest format: own declarative format, or an embedded language
       (such as Rhai)
 - [ ] Subtitle and motto, if any
