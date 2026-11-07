@@ -93,8 +93,8 @@ daxime/ASCII-Sector-Resources.
 
 ### Universe: the Northern Reach
 
-The Northern Reach, *a section of the asteroid belt*. Working reading
-(not yet confirmed by David):
+The Northern Reach, *a section of the asteroid belt*. This reading
+was confirmed by David on 2026-11-07:
 
 - Our own Solar System's main belt, some centuries ahead.
 - "Northern" is literal. The Reach is the high-inclination fringe of the
@@ -195,7 +195,6 @@ RNG.
 
 ## Open questions (David's to decide)
 
-- [ ] Confirm the reading of the Northern Reach above
 - [ ] On-foot and interior art (half-block floor plans or classic ASCII).
       Deferred by David 2026-11-07: decide once the space view and HUD
       designs are in place.
