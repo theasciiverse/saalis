@@ -5,9 +5,9 @@ line of Elite, Wing Commander: Privateer and above all **Ascii Sector**
 (Laserbrain Studios), rebuilt for the terminal in Rust + Ratatui with a
 universe of our own.
 
-**Status:** folder and notes only, 2026-10-20. No code. The direction is
-settled (a spiritual successor, see below); scope, universe and art are
-still open (see the end).
+**Status:** design only, no code yet. Direction settled 2026-10-20 (a
+spiritual successor, see below). Universe, art, flight model and first
+scope settled 2026-11-07 (see Decisions). Release plan in `ROADMAP.md`.
 
 ## Name
 
@@ -89,13 +89,91 @@ Reference only, for how the original plays (not to be copied): the
 0.7.2 Player's Manual and Quest Maker's Manual, both in
 daxime/ASCII-Sector-Resources.
 
+## Decisions (David, 2026-11-07)
+
+### Universe: the Northern Reach
+
+The Northern Reach, *a section of the asteroid belt*. Working reading
+(not yet confirmed by David):
+
+- Our own Solar System's main belt, some centuries ahead.
+- "Northern" is literal. The Reach is the high-inclination fringe of the
+  belt, above the ecliptic: cold, sparse and expensive to reach. Its
+  natural heart is the Pallas family (orbits tilted about 34°).
+- The crowded low belt (Ceres, Vesta) is the settled "south", where the
+  corporate crown sits.
+- **Regions, not star systems:** the map is belt regions (clusters around
+  a large body or a family), joined by drive lanes in place of jump
+  points. The nav map shows the belt seen from above, with height bands.
+- **Factions** (names still to invent): the low-belt corporate crown, the
+  Reach mining cooperatives, free traders, Reach pirates and
+  claim-jumpers, and an inner-system navy/customs that runs the scans.
+- **Commodities** from belt life: ice, volatiles, metals, rare earths,
+  hydroponic food, air, medicine and drive parts. Contraband: stims,
+  unlicensed AI cores, stolen claims.
+- All names of rocks, bases, people and ships are our own, with a
+  Finnish/Nordic flavour where it fits. Real large bodies (Ceres, Vesta,
+  Pallas, Hygiea) may appear under their own names.
+
+### Art: mix by size, one glyph family per role
+
+David: mix by size, "but also deliberately use different [glyphs] for
+different parts of the design and UI. For example pipes for clean lines
+and silhouettes". Each family has one clear job and is never mixed
+within one object:
+
+| Role | Family |
+|---|---|
+| Fighters, small craft, pods, pilots | classic ASCII glyph clusters, coloured, with a bright nose glyph |
+| Stations, capital ships, planets, asteroids | half-block shaded art (`▀▄█▌▐`, two colours per cell) |
+| Clean lines and silhouettes: docking rings, wireframe ship schematics (target box, shipyard), nav-map lanes, HUD frames | box-drawing pipes (`─│╭╮╱╲┼`) |
+| Stars, shots, particles, scoop beam, radar, map routes | Braille dots |
+| Energy, speed and shield gauges | block eighths (`▁▂▃▅▇`, `▏▎▍▌`) |
+| Labels, comms, menus | plain text |
+
+Truecolor. Drawn centred and scaled to the window, aspect-correct (circles
+stay round). Designed at 100x30 (the preview size), minimum 80x24. The HUD
+is ordinary Ratatui widgets around the play field, laid out in Ascii
+Sector's proven order with our own look:
+- top: the shields and armour diagram, energy, and set and actual speed
+- right: the radar and the target box
+- bottom: the weapons/damage panel, a lock warning and the comms line
+
+### Flight: Privateer-style
+
+The ship turns at its turn rate, and its velocity eases toward heading x
+set speed at the ship's acceleration, with a little drift for feel. An
+afterburner gives a boost. A Newtonian assist-off toggle may come later.
+
+### First release: flight and combat sandbox
+
+0.1.0 is one belt region: fly, dogfight two or three enemy types, with the
+HUD, radar, sound and `--demo`. Trading, regions and missions follow (see
+`ROADMAP.md`).
+
+### Code plan
+
+The template is Kaiku (loop, kitty held-key input, gamepad, Braille and
+half-block canvas, palette, cue-driven audio, demo autopilot, headless
+frame tests). Other sources:
+- Torched: session-log file and TOML options
+- Glider: data paths, aspect-correct placement, pause on focus loss,
+  `release.yml`
+- Armoured Commander II: versioned JSON saves and the dlopen ALSA loader
+
+The simulation stays free of terminal code. It uses its own SplitMix64
+RNG.
+
 ## Open questions (David's to decide)
 
-- [ ] The universe: setting, factions, why the player is a privateer
-- [ ] Scope of a first playable version (flight and combat core first?)
-- [ ] Art: classic ASCII ships as in Ascii Sector, or Braille and
-      half-block sub-cell drawing like other Asciiverse titles
-- [ ] On-foot parts and boarding: in the first version or later
-- [ ] Quest scripting language: own format, or an embedded language
+- [ ] Confirm the reading of the Northern Reach above
+- [ ] The "quiet alien" of the original pitch: in a real Solar System, a
+      found artifact or an unexplained visitor rather than a species?
+- [ ] Are the inner planets ever visited, or only off-map powers?
+- [ ] On-foot and interior art (half-block floor plans or classic ASCII)
+- [ ] Quest format: own declarative format, or an embedded language
+      (such as Rhai)
 - [ ] Subtitle and motto, if any
 - [ ] Trademark checks (EUIPO, PRH, USPTO) before announcing
+- [ ] The general `games/CLAUDE.md` that sibling repos cite is not on
+      this machine
