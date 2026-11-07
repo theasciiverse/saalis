@@ -45,8 +45,8 @@ Braille, so stars and the radar show as boxes there).
     The field shows about 1500 m across.
   - `space.rs`: Braille stars, shots and sparks; half-block rocks, the
     station and fireballs; the box-drawing dock, brackets and edge arrow.
-  - `glyphs.rs`: ASCII ships, built from parts in the ship's frame, and
-    the box-drawing schematics.
+  - `glyphs.rs`: ships (a glyph, plus the Braille nose line and wake with
+    crowd detail) and the box-drawing schematics.
   - `hud.rs`: gauges, the radar, the target box and comms.
   - `mod.rs`: the layout and the cards (title, keys, pause, quit, ship
     lost).
@@ -58,7 +58,8 @@ Braille, so stars and the radar show as boxes there).
 - Ship classes are in code for 0.1 (`sim/ship.rs`). They move to
   `data/` when the shipyard arrives (0.4).
 - Names are placeholders until the Reach's own names are settled:
-  - hulls: Tiira (the player's), Kärppä, Ahma, Karhu
+  - hulls: Tiira (the player's, `#`), Kärppä (`x`), Ahma (`H`), Karhu
+    (`M`)
   - Routa station
   - the pirates' callsigns
 
@@ -183,17 +184,38 @@ was confirmed by David on 2026-11-07:
 
 David: mix by size, "but also deliberately use different [glyphs] for
 different parts of the design and UI. For example pipes for clean lines
-and silhouettes". Each family has one clear job and is never mixed
-within one object:
+and silhouettes". Each family has one clear job:
 
 | Role | Family |
 |---|---|
-| Fighters, small craft, pods, pilots | classic ASCII glyph clusters, coloured, with a bright nose glyph |
+| Small and medium craft, pods, pilots | one ASCII glyph per hull, with a Braille nose line and wake (below) |
 | Stations, capital ships, planets, asteroids | half-block shaded art (`▀▄█▌▐`, two colours per cell) |
 | Clean lines and silhouettes: docking rings, wireframe ship schematics (target box, shipyard), nav-map lanes, HUD frames | box-drawing pipes (`─│╭╮╱╲┼`) |
 | Stars, shots, particles, scoop beam, radar, map routes | Braille dots |
 | Energy, speed and shield gauges | block eighths (`▁▂▃▅▇`, `▏▎▍▌`) |
 | Labels, comms, menus | plain text |
+
+**Ships (David, 2026-11-07).** David chose this after seeing mock-ups.
+Ascii Sector used one fixed glyph per ship with a `+` marker on the
+heading side. The first Saalis build used rotating stroke clusters, which
+read roughly at diagonals. Now each hull is one glyph, bold in its
+faction's colour:
+- `#` Tiira (the player's), `x` Kärppä, `H` Ahma, `M` Karhu
+- **Nose line:** Braille, running out of the nose in the faction's
+  colour and brightening to white at the tip. Pirates are red, so they
+  don't blend with the wakes.
+- **Wake:** Braille engine fire behind the ship, the same for everyone,
+  amber cooling to ember.
+- **Reading direction:** white always marks the front and dark red the
+  back. Braille is finer than a cell, so the line turns smoothly at any
+  heading.
+- **The wake shows thrust:** an ember at cruise, a flame while speeding
+  up, a long hot plume on the afterburner.
+- **Toned down in a crowd** (David: "tone down the amount if it gets
+  crowded"). The player and the target always draw in full. Others draw
+  shorter and dimmer from 5 ships in view, and lose their wakes from 8
+  (`glyphs::Detail::crowded`).
+- **Capital ships** (later) use half-block art, as above.
 
 Truecolor. Drawn centred and scaled to the window, aspect-correct (circles
 stay round). Designed at 100x30 (the preview size), minimum 80x24. The HUD

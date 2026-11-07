@@ -1,6 +1,7 @@
 //! The space view: Braille stars, shots and sparks; half-block rocks, the
-//! station and fireballs; ASCII ships and box-drawing dock and brackets on top
-//! (one glyph family per role, David 2026-11-07).
+//! station and fireballs; ships as an ASCII glyph with Braille nose line and
+//! wake; box-drawing dock and brackets on top (one glyph family per role,
+//! David 2026-11-07).
 
 use super::canvas::Canvas;
 use super::glyphs;
@@ -62,16 +63,21 @@ pub fn draw(buf: &mut Buffer, view: &View, w: &World) {
         let (x, y) = view.dot(s.pos);
         c.dot(x, y, rgb(scale(base, 1.0 - t * 0.6)));
     }
+    // ships' Braille: the player and the target in full, others toned down
+    // as the view fills up
+    let seen: Vec<&crate::sim::ship::Ship> = w.ships.iter().filter(|s| s.alive && view.sees(s.pos, 200.0)).collect();
+    let crowd = glyphs::Detail::crowded(seen.len());
+    for s in &seen {
+        let full = s.id == crate::sim::PLAYER || w.target == Some(s.id);
+        glyphs::trails(&mut c, view, s, if full { glyphs::Detail::FULL } else { crowd }, w.fleeing(s.id), w.time);
+    }
     c.blit(buf, a, pal::SPACE);
 
     if view.sees(w.station.pos, w.station.radius + 400.0) {
         dock(buf, view, w);
     }
-    for s in &w.ships {
-        if s.alive && view.sees(s.pos, 200.0) {
-            let flee = w.fleeing(s.id);
-            glyphs::ship(buf, view, s, flee, w.time);
-        }
+    for s in &seen {
+        glyphs::glyph(buf, view, s, w.fleeing(s.id));
     }
     if w.phase == Phase::Flying {
         target_marks(buf, view, w);

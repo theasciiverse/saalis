@@ -24,15 +24,12 @@ pub const STAR: [Color; 3] = [Color::Rgb(54, 60, 88), Color::Rgb(110, 118, 160),
 
 /// The player's colours: ice and cyan.
 pub const PLAYER: Rgb = (190, 236, 255);
-pub const PLAYER_WING: Rgb = (100, 180, 220);
 pub const PLAYER_SHOT: Color = Color::Rgb(170, 240, 255);
 /// Reserved for pirate fire: nothing else uses it.
 pub const PIRATE_SHOT: Color = Color::Rgb(255, 60, 70);
-pub const PIRATE: Rgb = (236, 120, 80);
-pub const PIRATE_WING: Rgb = (190, 80, 60);
+pub const PIRATE: Rgb = (240, 80, 80);
 /// The selected target's brackets and arrow.
 pub const TARGET: Color = Color::Rgb(255, 196, 80);
-pub const NOSE: Color = Color::Rgb(255, 255, 240);
 pub const STATION: Rgb = (150, 170, 190);
 pub const WINDOW: Rgb = (255, 210, 130);
 pub const ROCK: [Rgb; 3] = [(120, 108, 96), (104, 100, 98), (130, 118, 100)];
