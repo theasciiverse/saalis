@@ -31,8 +31,11 @@ Built 2026-11-07.
 - [x] Generated missions with deadlines, guilds, fixers
 
 ## 0.4.0: the shipyard
-- [ ] Hulls and upgrades, missiles and ECM, turrets, repair
-- [ ] Contraband, hidden compartments, customs scans
+
+Built 2026-11-07.
+
+- [x] Hulls and upgrades, missiles and ECM, turrets, repair
+- [x] Contraband, hidden compartments, customs scans
 
 ## 0.5.0: a living belt
 - [ ] Faction fleets and region control

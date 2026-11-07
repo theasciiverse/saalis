@@ -157,7 +157,8 @@ pub fn board(seed: u64, s: &Sector, region: usize, base: usize, clock: f64, memb
         let (r, b) = others[rng.below(others.len() as u32) as usize];
         let h = hops(r);
         let task = if rng.chance(0.6) {
-            let good = rng.below(econ::N as u32) as usize;
+            // guilds don't ship contraband
+            let good = rng.below(econ::STIMS as u32) as usize;
             let units = 5 + rng.below(16);
             Task::Cargo { good, units, region: r, base: b }
         } else {

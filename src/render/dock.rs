@@ -92,12 +92,15 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &App) {
         let sell_col = if (sell as f32) > idx as f32 * 1.0 { good } else { pal::TEXT };
         let held = w.cargo[g];
         let sel = g == app.dock_row;
-        let name_st = if sel { Style::default().fg(pal::TEXT).add_modifier(Modifier::REVERSED) } else { Style::default().fg(pal::TEXT) };
-        let stock = if m.has(g) { "" } else { " (none)" };
+        // contraband here (banned by the owner's law) shows red
+        let banned_here = crate::sim::econ::illegal(w.owner(), g);
+        let base_st = Style::default().fg(if banned_here { Color::Rgb(240, 120, 100) } else { pal::TEXT });
+        let name_st = if sel { base_st.add_modifier(Modifier::REVERSED) } else { base_st };
+        let stock = if !m.open[g] { " (banned)" } else if m.has(g) { "" } else { " (none)" };
         rows.push(Line::from(vec![
             Span::styled(format!("{:<17}", format!("{}{stock}", econ::GOODS[g].name)), name_st),
-            Span::styled(format!("{buy:>7}"), Style::default().fg(buy_col)),
-            Span::styled(format!("{sell:>7}"), Style::default().fg(sell_col)),
+            Span::styled(if m.open[g] { format!("{buy:>7}") } else { format!("{:>7}", "—") }, Style::default().fg(buy_col)),
+            Span::styled(if m.open[g] { format!("{sell:>7}") } else { format!("{:>7}", "—") }, Style::default().fg(sell_col)),
             Span::styled(format!("{idx:>8}"), hdr),
             Span::styled(format!("{:>7}", if held > 0 { held.to_string() } else { "·".into() }), Style::default().fg(pal::TEXT)),
             Span::styled(format!("{:>7}", if held > 0 { w.paid[g].to_string() } else { String::new() }), hdr),

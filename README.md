@@ -10,7 +10,9 @@ Reach's food and air, and every market moves with what you buy and sell.
 Claim-jumpers work the lanes, worst where no station watches. The
 cooperatives' patrols hunt them, freighters run between the bases, and
 the guild boards and the fixers in the bars always have a job with a
-deadline. Fly and
+deadline. Shipyards sell bigger hulls, guns, plating, shields, missiles
+and turrets. Stims and unlicensed AI cores pay well where they're
+banned, if the customs scans miss the hidden compartment. Fly and
 fight in real time from a top-down view. Shields recharge from one energy
 pool and guard four facings. Under them is armour that only a dock can
 patch.
@@ -40,6 +42,7 @@ comfortable.
 | M | match the target's speed |
 | Space | fire guns (hold) |
 | Tab | afterburner (hold) |
+| F | launch a missile (it seeks when LOCK shows) |
 | T | next target |
 | R | nearest target |
 | N | nav map (Tab in it: the whole Reach) |
@@ -53,8 +56,8 @@ comfortable.
 | F1 | keys |
 | Esc | quit |
 
-Docked: Tab switches between the exchange, the mission boards and the
-bar. At the exchange ↑ ↓ choose a good, B or → buys, S or ← sells (Shift
+Docked: Tab switches between the exchange, the mission boards, the bar
+and the shipyard. At the exchange ↑ ↓ choose a good, B or → buys, S or ← sells (Shift
 for ten). On the boards and in the bar A takes a job, and 1 or 2 joins a
 guild. R repairs, F saves, Enter launches. Every landing saves the game; C on
 the title continues it.

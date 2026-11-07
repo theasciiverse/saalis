@@ -10,7 +10,7 @@ use super::{Phase, World, PLAYER};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-const FORMAT: u32 = 4;
+const FORMAT: u32 = 5;
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct Save {
@@ -96,8 +96,8 @@ impl World {
             return None;
         }
         w.enter_region(s.region);
-        let kinds: Vec<_> = w.sector.all_bases().iter().map(|&(r, b)| w.sector.regions[r].bases[b].kind).collect();
-        w.markets = s.markets.into_iter().zip(kinds).map(|(m, k)| m.with_kind(k)).collect();
+        let laws: Vec<_> = w.sector.all_bases().iter().map(|&(r, b)| (w.sector.regions[r].bases[b].kind, w.sector.regions[r].owner, w.sector.regions[r].bases[b].black_market)).collect();
+        w.markets = s.markets.into_iter().zip(laws).map(|(m, (k, o, bm))| m.with_kind(k, o, bm)).collect();
         w.clock = s.clock;
         w.credits = s.credits;
         w.cargo = s.cargo;

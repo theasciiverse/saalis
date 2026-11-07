@@ -172,6 +172,8 @@ pub struct World {
     pub standing: Standing,
     /// ships the player has fired on, which now fight back
     pub angry: HashSet<u32>,
+    /// patrols that have scanned the player's hold already
+    scanned: HashSet<u32>,
     /// jobs taken
     pub missions: Vec<Mission>,
     /// units in the hold that belong to cargo jobs
@@ -226,7 +228,14 @@ impl World {
     /// A new game: docked at Routa Station in Pallas Reach.
     pub fn new(seed: u64) -> World {
         let sector = Sector::reach();
-        let markets = sector.all_bases().iter().map(|&(r, b)| Market::new(sector.regions[r].bases[b].kind)).collect();
+        let markets = sector
+            .all_bases()
+            .iter()
+            .map(|&(r, b)| {
+                let d = &sector.regions[r].bases[b];
+                Market::lawful(d.kind, sector.regions[r].owner, d.black_market)
+            })
+            .collect();
         let mut w = World {
             seed,
             rng: Rng::new(seed),
@@ -241,6 +250,7 @@ impl World {
             cargo: [0; econ::N],
             standing: Standing::default(),
             angry: HashSet::new(),
+            scanned: HashSet::new(),
             missions: Vec::new(),
             mission_cargo: 0,
             members: [false; 2],
@@ -515,6 +525,73 @@ impl World {
         }
     }
 
+    /// Units of contraband aboard under a faction's law.
+    pub fn contraband(&self, f: Faction) -> u32 {
+        (0..econ::N).filter(|&g| econ::illegal(f, g)).map(|g| self.cargo[g]).sum()
+    }
+
+    /// Patrols of factions with laws scan the player's hold once each, when
+    /// they pass within 1.2 km.
+    fn patrol_scans(&mut self) {
+        let Some(me) = self.player().map(|p| p.pos) else { return };
+        let due: Vec<(u32, Faction, String)> = self
+            .ships
+            .iter()
+            .filter(|s| s.alive && s.side == Side::Patrol && !self.scanned.contains(&s.id) && !self.hostile_to_player(s) && (s.pos - me).len() < 1200.0)
+            .filter(|s| (0..econ::N).any(|g| econ::illegal(s.faction, g)))
+            .map(|s| (s.id, s.faction, s.callsign.clone()))
+            .collect();
+        for (id, f, from) in due {
+            self.scanned.insert(id);
+            self.inspect(f, from, Some(id));
+        }
+    }
+
+    /// A customs inspection under faction `f`'s law. What isn't hidden is
+    /// found; hidden compartments are found more often the more of the hold
+    /// they take (Ascii Sector: under a tenth is safe). Found goods are
+    /// seized with a fine; a fine you can't pay makes a patrol shoot.
+    fn inspect(&mut self, f: Faction, from: String, patrol: Option<u32>) {
+        let illegal = self.contraband(f);
+        if illegal == 0 {
+            if patrol.is_some() {
+                self.say(from, "Scan complete. You're clean. Fly safe.", Some(Side::Patrol));
+            }
+            return;
+        }
+        let Some(p) = self.player() else { return };
+        let hidden = p.kit.hidden;
+        let cap = p.cargo_cap().max(1) as f32;
+        let visible = illegal.saturating_sub(hidden);
+        let p_hidden = ((hidden as f32 / cap - 0.1) * 2.0).clamp(0.05, 0.6);
+        let found = visible > 0 || self.rng.chance(p_hidden);
+        log::info!("inspection by {:?}: contraband={illegal} hidden={hidden} found={found}", f);
+        if !found {
+            self.say(from, "Scan complete. You're clean. Fly safe.", Some(Side::Patrol));
+            return;
+        }
+        let mut value = 0;
+        for g in (0..econ::N).filter(|&g| econ::illegal(f, g)) {
+            value += self.cargo[g] * econ::index(&self.markets, g);
+            self.cargo[g] = 0;
+            self.paid[g] = 0;
+        }
+        let fine = value / 2;
+        self.standing.shift(f, -8);
+        if self.credits >= fine {
+            self.credits -= fine;
+            self.say(from, format!("Contraband aboard. Seized, and a {fine} cr fine."), Some(Side::Patrol));
+        } else {
+            self.credits = 0;
+            self.standing.shift(f, -10);
+            self.say(from, "Contraband, and you can't pay the fine. Heave to!", Some(Side::Patrol));
+            if let Some(id) = patrol {
+                self.angry.insert(id);
+            }
+        }
+        self.cues.push(Cue::Warning);
+    }
+
     /// A bounty job is open in the current region.
     fn hunting_here(&self) -> bool {
         self.missions.iter().any(|m| matches!(m.task, Task::Bounty { region, .. } if region == self.region))
@@ -700,6 +777,11 @@ impl World {
         }
         self.pass_hours(0.5);
         log::info!("docked at {}", self.bases[b].name);
+        if !self.bases[b].black_market {
+            let owner = self.owner();
+            let from = format!("{} Customs", self.bases[b].name.split(' ').next().unwrap_or("Base"));
+            self.inspect(owner, from, None);
+        }
         self.check_missions();
         // deliveries
         let here = (self.region, b);
@@ -767,6 +849,9 @@ impl World {
     /// Sells up to `n` of good `g`; returns how many.
     pub fn sell(&mut self, g: usize, n: u32) -> u32 {
         let Some(m) = self.docked_market() else { return 0 };
+        if !self.markets[m].open[g] {
+            return 0;
+        }
         let k = n.min(self.cargo[g]);
         for _ in 0..k {
             self.credits += self.markets[m].sell_price(g);
@@ -954,7 +1039,7 @@ impl World {
     fn tip(&mut self) -> String {
         let g = self.rng.below(econ::N as u32) as usize;
         let all = self.sector.all_bases();
-        let best = (0..self.markets.len()).max_by_key(|&m| self.markets[m].sell_price(g));
+        let best = (0..self.markets.len()).filter(|&m| self.markets[m].open[g]).max_by_key(|&m| self.markets[m].sell_price(g));
         match best {
             Some(m) => {
                 let (r, b) = all[m];
@@ -1091,6 +1176,7 @@ impl World {
         self.encounter(dt);
         if (self.time * 2.0).floor() != ((self.time - dt) * 2.0).floor() {
             self.check_missions();
+            self.patrol_scans();
         }
         if self.target.is_some_and(|t| self.ship(t).is_none()) {
             self.target = None;
@@ -1452,6 +1538,7 @@ impl World {
             }
         }
         self.angry.retain(|id| self.ships.iter().any(|s| s.id == *id && s.alive));
+        self.scanned.retain(|id| self.ships.iter().any(|s| s.id == *id && s.alive));
         self.ships.retain(|s| s.alive || s.id == PLAYER);
         let ids: Vec<u32> = self.ships.iter().map(|s| s.id).collect();
         self.brains.retain(|id, _| ids.contains(id));
@@ -1933,6 +2020,40 @@ mod tests {
         let n = w.shots.len();
         w.update(&Intent::default(), 1.0 / 60.0);
         assert!(w.shots.len() > n, "the turret fired");
+    }
+
+    #[test]
+    fn customs_find_open_contraband_and_hidden_compartments_mostly_hold() {
+        // stims in the open, landing at Routa (the cooperatives ban them)
+        let mut w = World::new(5);
+        w.cargo[econ::STIMS] = 4;
+        w.launch();
+        w.ships[0].vel = V2::ZERO;
+        w.ships[0].pos = w.bases[0].pos + v2(0.0, -400.0);
+        w.land();
+        assert_eq!(w.cargo[econ::STIMS], 0, "seized");
+        assert!(w.credits < START_CREDITS);
+
+        // the same four stims in a small hidden compartment: usually missed
+        let mut clean = 0;
+        for seed in 0..40 {
+            let mut w = World::new(seed);
+            w.ships[0].kit.hidden = 5;
+            w.cargo[econ::STIMS] = 4;
+            w.inspect(Faction::Coop, "Customs".into(), None);
+            clean += (w.cargo[econ::STIMS] == 4) as u32;
+        }
+        assert!(clean > 25, "{clean}/40 got through");
+    }
+
+    #[test]
+    fn black_markets_deal_in_what_the_law_forbids() {
+        let w = World::new(5);
+        let all = w.sector.all_bases();
+        let at = |name: &str| all.iter().position(|&(r, b)| w.sector.regions[r].bases[b].name == name).unwrap();
+        assert!(!w.markets[at("Routa Station")].open[econ::STIMS]);
+        assert!(w.markets[at("Vaski Works")].open[econ::STIMS]);
+        assert!(w.markets[at("Sisu Clinic")].open[econ::STIMS], "the traders' clinic: legal there");
     }
 
     #[test]

@@ -5,20 +5,15 @@ line of Elite, Wing Commander: Privateer and above all **Ascii Sector**
 (Laserbrain Studios), rebuilt for the terminal in Rust + Ratatui with a
 universe of our own.
 
-**Status (2026-11-07):** 0.3.0 is built, on top of 0.2.0 (regions,
-lanes, trade, saves).
-- **Factions:** five, with your standing toward each (-125 to 125).
-  Every region has an owner.
-- **Traffic:** the owner's patrols and freighters pass through. Pirates
-  fight everyone, and shooting a patrol turns it and its faction against
-  you.
-- **Hailing (C):** bribe pirates or talk them down; ask patrols for news
-  or an escort; ask traders for price tips.
-- **Missions:** two guild boards (membership fees, ratings, cargo,
-  courier, bounty and patrol jobs) and fixers in the bars, all with
-  deadlines.
+**Status (2026-11-07):** 0.4.0 is built, on top of 0.3.0 (factions,
+patrols, traders, hailing, missions) and 0.2.0 (regions, trade, saves).
+- **Shipyard:** four player hulls; guns; armour, shield and power grades;
+  cargo expansion; ECM; missiles with seeker lock; a rear turret; hidden
+  compartments at black markets.
+- **Contraband:** stims and AI cores are banned by faction law.
+  Patrols scan your hold, and customs inspect it on landing.
 - **Tested:** unit tests and tmux runs. No person has played it yet, so
-  balance is untuned.
+  prices and balance are untuned.
 
 Design decisions are below, and the release plan is in `ROADMAP.md`.
 
@@ -58,6 +53,11 @@ Braille, so stars and the radar show as boxes there).
     back by the hour.
   - `save.rs`: the one save slot, as versioned JSON (format 3).
   - `faction.rs`: factions and standing.
+  - `shipyard.rs`: what each base sells (shipyards at hubs, refineries
+    and customs; outfitters everywhere but the farm and the clinic;
+    hidden compartments only at the black markets, Vaski Works and Halla
+    Refinery) and buying it. A ship's fittings are its `ship::Kit`, and
+    stats come from `Ship::max_*`.
   - `mission.rs`: guilds, jobs and the boards. A board is seeded by the
     base and the day.
   - `v2.rs`: vectors. Heading 0 is up and angles grow clockwise.
@@ -92,7 +92,10 @@ Braille, so stars and the radar show as boxes there).
     Customs (the inner planets), and claim-jumpers
   - guilds: the Free Traders' Guild and the Reach Watch
   - fixers' names and lines (`mission.rs`), the comms lines (`mod.rs`)
-  - hulls Kotka (patrol fighter, `A`) and Haahka (freighter, `O`)
+  - hulls Kotka (patrol fighter, `A`) and Haahka (freighter, `O`); the
+    player's Kuikka (`Y`), Lokki (`U`) and Haukka (`W`)
+  - the plasma gun; stims and AI cores, and which factions ban them
+    (`econ::illegal`); all shipyard prices
 
 ## Name
 
