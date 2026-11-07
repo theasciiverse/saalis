@@ -14,6 +14,7 @@ pub mod shipyard;
 pub mod sector;
 pub mod ship;
 pub mod v2;
+pub mod war;
 
 use ai::{Brain, Obstacle, Role};
 use cue::Cue;
@@ -174,6 +175,8 @@ pub struct World {
     pub angry: HashSet<u32>,
     /// patrols that have scanned the player's hold already
     scanned: HashSet<u32>,
+    /// who holds what, and the fleets on the lanes
+    pub war: war::War,
     /// jobs taken
     pub missions: Vec<Mission>,
     /// units in the hold that belong to cargo jobs
@@ -251,6 +254,7 @@ impl World {
             standing: Standing::default(),
             angry: HashSet::new(),
             scanned: HashSet::new(),
+            war: war::War::new(&Sector::reach()),
             missions: Vec::new(),
             mission_cargo: 0,
             members: [false; 2],
@@ -315,7 +319,7 @@ impl World {
         self.blasts.clear();
         self.target = None;
         self.autopilot = false;
-        let threat = self.sector.regions[r].threat;
+        let threat = self.war.threat(&self.sector, r);
         self.encounter_t = if threat == 0 { f32::INFINITY } else { self.rng.range(40.0, 110.0) / threat as f32 };
     }
 
@@ -348,9 +352,14 @@ impl World {
             && (s.side == Side::Pirate || self.angry.contains(&s.id) || self.standing.of(s.faction) <= faction::HOSTILE)
     }
 
-    /// The owner of the current region.
+    /// Who holds the current region now.
     pub fn owner(&self) -> Faction {
-        self.sector.regions[self.region].owner
+        self.war.control[self.region]
+    }
+
+    /// How dangerous the current region is now.
+    pub fn threat(&self) -> u32 {
+        self.war.threat(&self.sector, self.region)
     }
 
     /// Hostiles within `range` of the player.
@@ -391,6 +400,10 @@ impl World {
         if whole >= 1.0 {
             for m in &mut self.markets {
                 m.drift(whole as f32);
+            }
+            for h in 0..(whole as u32).min(48) {
+                let news = self.war.hour(&self.sector, &mut self.rng, before + 1.0 + h as f64, self.region);
+                self.war_news(news);
             }
         }
     }
@@ -592,6 +605,37 @@ impl World {
         self.cues.push(Cue::Warning);
     }
 
+    /// The war's news over comms, and a battle where the player is.
+    fn war_news(&mut self, news: Vec<war::News>) {
+        for n in news {
+            log::info!("war: {n:?}");
+            let name = |r: usize| self.sector.regions[r].name;
+            let line = match n {
+                war::News::Sighted { faction, to } if to == self.region || self.sector.neighbours(self.region).contains(&to) => {
+                    format!("{} fleet on the lanes, bound for {}.", faction.name(), name(to))
+                }
+                war::News::Taken { region, by, from } => format!("{} has fallen to the {}. The {} are out.", name(region), by.name(), from.name()),
+                war::News::Held { region, against } if region == self.region => format!("The {} were beaten off at {}.", against.name(), name(region)),
+                war::News::Battle { region } if self.phase == Phase::Flying && region == self.region => {
+                    // the fleet comes out of the lane near the player
+                    self.spawn_encounter();
+                    if self.owner() != Faction::Pirates {
+                        let owner = self.owner();
+                        self.spawn_traveller(Side::Patrol, owner);
+                        let me = self.player().map(|p| p.pos).unwrap_or_default();
+                        let n = self.ships.len();
+                        for s in self.ships.iter_mut().skip(n.saturating_sub(2)) {
+                            s.pos = me + v2(600.0, 300.0);
+                        }
+                    }
+                    "Fleet action in this region! All ships, weapons free.".to_string()
+                }
+                _ => continue,
+            };
+            self.say("Lane beacon", line, None);
+        }
+    }
+
     /// A bounty job is open in the current region.
     fn hunting_here(&self) -> bool {
         self.missions.iter().any(|m| matches!(m.task, Task::Bounty { region, .. } if region == self.region))
@@ -722,7 +766,11 @@ impl World {
         };
         self.cues.push(Cue::Burner);
         let def = &self.sector.regions[to];
-        let (note, threat) = (format!("{}: {}.", def.name, def.note), def.threat);
+        let mut note = format!("{}: {}.", def.name, def.note);
+        if self.war.control[to] != def.owner {
+            note.push_str(&format!(" Held by the {} now.", self.war.control[to].name()));
+        }
+        let threat = self.threat();
         self.say("Lane beacon", note, None);
         if (threat > 0 && self.rng.chance(0.2 * threat as f32)) || self.hunting_here() {
             self.encounter_t = self.rng.range(3.0, 8.0);
@@ -1020,7 +1068,7 @@ impl World {
 
     /// A patrol's news: how quiet this region is, and a word on the Reach.
     fn rumour(&mut self) -> String {
-        let here = match self.sector.regions[self.region].threat {
+        let here = match self.threat() {
             0 => "Quiet as a tomb here.",
             1 => "A few claim-jumpers, nothing we can't handle.",
             2 => "Busy. Keep your shields up.",
@@ -1204,7 +1252,7 @@ impl World {
             self.cues.push(Cue::Contact);
             return;
         }
-        let threat = self.sector.regions[self.region].threat as f32;
+        let threat = self.threat() as f32;
         let Some(p) = self.player() else { return };
         let to = goal - p.pos;
         let left = to.len() - stop;
@@ -1437,6 +1485,7 @@ impl World {
             self.credits += s.class.bounty;
             self.standing.shift(Faction::Pirates, -3);
             self.standing.shift(Faction::Traders, 1);
+            self.war.pirate_down(self.region);
             let region = self.region;
             for m in &mut self.missions {
                 if let Task::Bounty { region: r, done, .. } = &mut m.task {
@@ -1571,7 +1620,7 @@ impl World {
         if self.encounter_t > 0.0 {
             return;
         }
-        let threat = self.sector.regions[self.region].threat as f32;
+        let threat = self.threat() as f32;
         self.encounter_t = if self.busy { 8.0 } else { self.rng.range(35.0, 80.0) };
         if self.busy {
             self.spawn_encounter();
@@ -1659,7 +1708,7 @@ impl World {
         self.encounters += 1;
         let bearing = self.rng.range(-3.14, 3.14);
         let at = centre + V2::from_heading(bearing) * self.rng.range(3200.0, 3800.0);
-        let threat = self.sector.regions[self.region].threat;
+        let threat = self.threat();
         let classes = World::group(self.encounters, threat);
         log::info!("encounter {} in {}: {:?}", self.encounters, self.region_name(), classes.iter().map(|c| c.name).collect::<Vec<_>>());
         for (k, class) in classes.iter().enumerate() {
@@ -2054,6 +2103,18 @@ mod tests {
         assert!(!w.markets[at("Routa Station")].open[econ::STIMS]);
         assert!(w.markets[at("Vaski Works")].open[econ::STIMS]);
         assert!(w.markets[at("Sisu Clinic")].open[econ::STIMS], "the traders' clinic: legal there");
+    }
+
+    #[test]
+    fn a_month_of_war_runs_round_the_player() {
+        let mut w = World::new(12);
+        w.launch();
+        for _ in 0..30 {
+            w.pass_hours(24.0);
+            fly(&mut w, 2.0);
+        }
+        assert!(w.clock > 24.0 * 30.0);
+        assert!(w.war.control.len() == w.sector.regions.len());
     }
 
     #[test]

@@ -10,7 +10,7 @@ use super::{Phase, World, PLAYER};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-const FORMAT: u32 = 5;
+const FORMAT: u32 = 6;
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct Save {
@@ -35,6 +35,7 @@ pub struct Save {
     pub members: [bool; 2],
     pub rating: [u32; 2],
     pub next_mission: u32,
+    pub war: super::war::War,
 }
 
 /// Where saves live: `SAALIS_DATA_DIR`, or the platform's data folder.
@@ -83,6 +84,7 @@ impl World {
             members: self.members,
             rating: self.rating,
             next_mission: self.next_mission,
+            war: self.war.clone(),
         })
     }
 
@@ -110,6 +112,9 @@ impl World {
         w.members = s.members;
         w.rating = s.rating;
         w.next_mission = s.next_mission;
+        if s.war.control.len() == w.sector.regions.len() {
+            w.war = s.war;
+        }
         let class = ship::hull_named(&s.hull_class)?;
         let mut p = Ship::new(PLAYER, class, Side::Player, "you", w.bases[s.base].pos, 0.0);
         p.refit(s.kit);

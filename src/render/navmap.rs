@@ -154,13 +154,26 @@ fn sector(buf: &mut Buffer, map: Rect, list: Rect, app: &App) {
     c.blit(buf, map, pal::CHROME_BG);
     buf.set_string(map.x + 1, map.y, "high fringe ↑", Style::default().fg(pal::TRACE));
     buf.set_string(map.x + 1, map.bottom() - 1, "↓ the low belt", Style::default().fg(pal::TRACE));
+    // fleets on the lanes, partway along by how far they've come
+    for f in &w.war.fleets {
+        let (a, b) = (place(s.regions[f.from].map), place(s.regions[f.to].map));
+        let t = (1.0 - ((f.eta - w.clock) / crate::sim::war::FLEET_HOURS) as f32).clamp(0.1, 0.9);
+        let (x, y) = ((a.0 + (b.0 - a.0) * t) as u16, (a.1 + (b.1 - a.1) * t) as u16);
+        if x < map.width && y < map.height {
+            let ang = crate::sim::v2::v2(b.0 - a.0, (b.1 - a.1) * 2.0).heading();
+            const ARROWS: [&str; 8] = ["▲", "◥", "▶", "◢", "▼", "◣", "◀", "◤"];
+            let i = ((ang / std::f32::consts::FRAC_PI_4).round() as i32).rem_euclid(8) as usize;
+            buf.set_string(map.x + x, map.y + y, ARROWS[i], Style::default().fg(rgb(pal::faction(f.faction))).add_modifier(Modifier::BOLD));
+        }
+    }
     for (i, r) in s.regions.iter().enumerate() {
         let (x, y) = place(r.map);
         let (x, y) = (x as u16, y as u16);
         if x >= map.width || y >= map.height {
             continue;
         }
-        let col = threat_colour(r.threat);
+        // the name in the colour of whoever holds it now
+        let col = rgb(pal::faction(w.war.control[i]));
         let mut st = Style::default().fg(col);
         if i == app.map_sel {
             st = st.add_modifier(Modifier::REVERSED);
@@ -177,13 +190,30 @@ fn sector(buf: &mut Buffer, map: Rect, list: Rect, app: &App) {
         if i == app.map_sel {
             st = st.add_modifier(Modifier::REVERSED);
         }
-        let danger = "▮".repeat(r.threat as usize) + &" ".repeat(3 - r.threat.min(3) as usize);
-        let bases = if r.bases.is_empty() { "no base".to_string() } else { format!("{} base", r.bases.len()) };
-        lines.push(Line::from(vec![Span::styled(format!("{:<17}", r.name), st), Span::styled(danger, Style::default().fg(threat_colour(r.threat))), Span::styled(format!(" {bases}"), Style::default().fg(pal::DIM))]));
+        let threat = w.war.threat(s, i);
+        let danger = "▮".repeat(threat as usize) + &" ".repeat(3 - threat.min(3) as usize);
+        let holder = w.war.control[i];
+        let short = match holder {
+            crate::sim::faction::Faction::Coop => "co-op",
+            crate::sim::faction::Faction::Crown => "Crown",
+            crate::sim::faction::Faction::Traders => "traders",
+            crate::sim::faction::Faction::Inner => "customs",
+            crate::sim::faction::Faction::Pirates => "pirates",
+        };
+        lines.push(Line::from(vec![
+            Span::styled(format!("{:<15}", r.name), st),
+            Span::styled(danger, Style::default().fg(threat_colour(threat))),
+            Span::styled(format!(" {short}"), Style::default().fg(rgb(pal::faction(holder)))),
+        ]));
     }
     if let Some(r) = s.regions.get(app.map_sel) {
         lines.push(Line::from(""));
         lines.push(Line::from(Span::styled(r.note.to_string(), Style::default().fg(pal::DIM))));
+        let holder = w.war.control[app.map_sel];
+        lines.push(Line::from(vec![
+            Span::styled(format!("{} ", holder.name()), Style::default().fg(rgb(pal::faction(holder)))),
+            Span::styled(format!("hold {:.0}%", w.war.garrison[app.map_sel]), Style::default().fg(pal::DIM)),
+        ]));
         let hops = s.route(w.region, app.map_sel).len();
         if app.map_sel != w.region {
             lines.push(Line::from(Span::styled(format!("{hops} lane{} away", if hops == 1 { "" } else { "s" }), Style::default().fg(rgb(pal::LANE)))));

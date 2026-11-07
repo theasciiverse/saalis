@@ -38,7 +38,7 @@ Built 2026-11-07.
 - [x] Contraband, hidden compartments, customs scans
 
 ## 0.5.0: a living belt
-- [ ] Faction fleets and region control
+- [x] Faction fleets and region control
 - [ ] Catalog entry and first public release
 
 ## 0.6.0 to 0.8.0
