@@ -39,7 +39,8 @@ Built 2026-11-07.
 
 ## 0.5.0: a living belt
 - [x] Faction fleets and region control
-- [ ] Catalog entry and first public release
+- [ ] Catalog entry and first public release: drafts in `asciiverse/saalis.toml` and `.md`;
+      the hub entry, pushing and tagging are David's call
 
 ## 0.6.0 to 0.8.0
 - [ ] Walkable bases
