@@ -129,7 +129,8 @@ pub fn bottom(buf: &mut Buffer, area: Rect, w: &World, note: Option<&str>) {
             let col = match c.side {
                 Some(Side::Pirate) => rgb(pal::PIRATE),
                 Some(Side::Player) => pal::TEXT,
-                None => pal::TRAFFIC,
+                Some(Side::Patrol) => rgb(pal::faction(crate::sim::faction::Faction::Coop)),
+                Some(Side::Trader) | None => pal::TRAFFIC,
             };
             let mut text = format!("{}: {}", c.from, c.text);
             if text.chars().count() > room {
@@ -194,10 +195,12 @@ pub fn radar(buf: &mut Buffer, area: Rect, w: &World, aspect: f32) {
         let (at, out) = place(w.sector.mouth(w.region, to));
         blob(&mut c, at, if out { rgb(pal::scale(pal::LANE, 0.55)) } else { rgb(pal::LANE) });
     }
-    for s in w.ships.iter().filter(|s| s.alive && s.side == Side::Pirate) {
+    for s in w.ships.iter().filter(|s| s.alive && s.side != Side::Player) {
         let ((x, y), out) = place(s.pos);
         let is_target = w.target == Some(s.id);
-        let col = if is_target { pal::TARGET } else if out || w.fleeing(s.id) { rgb(pal::scale(pal::PIRATE, 0.55)) } else { rgb(pal::PIRATE) };
+        // hostiles red whoever they are; everyone else in their faction's colour
+        let base = if w.hostile_to_player(s) { pal::PIRATE } else { pal::faction(s.faction) };
+        let col = if is_target { pal::TARGET } else if out || w.fleeing(s.id) { rgb(pal::scale(base, 0.55)) } else { rgb(base) };
         c.dot(x, y, col);
         if is_target {
             c.dot(x + 1, y, col);
@@ -229,7 +232,10 @@ pub fn target(buf: &mut Buffer, area: Rect, w: &World) {
     let me = w.player();
     let mut lines = vec![
         Line::from(Span::styled(t.callsign.clone(), Style::default().fg(pal::TARGET).add_modifier(Modifier::BOLD))),
-        Line::from(label(t.class.role)),
+        Line::from(vec![
+            Span::styled(format!("{} · ", t.faction.name()), Style::default().fg(rgb(pal::faction(t.faction)))),
+            label(if w.hostile_to_player(t) { "hostile" } else { t.class.role }),
+        ]),
     ];
     let schem = glyphs::schematic(t.class);
     let wire = pal::ramp(&pal::GAUGE, t.hull_frac());

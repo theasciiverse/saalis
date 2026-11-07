@@ -10,6 +10,7 @@
 //! recharges four shield facings; under each facing is armour that does not
 //! recharge; under the armour, the hull.
 
+use super::faction::Faction;
 use super::v2::{turn_to, V2};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -194,10 +195,56 @@ pub static KARHU: Class = Class {
     cargo: 0,
 };
 
+pub static KOTKA: Class = Class {
+    name: "Kotka",
+    role: "patrol fighter",
+    size: Size::Medium,
+    max_speed: 290.0,
+    burner_speed: 540.0,
+    accel: 240.0,
+    turn_rate: 2.6,
+    energy: 110.0,
+    recharge: 22.0,
+    shield: 20.0,
+    shield_regen: 4.0,
+    armour: [18.0, 14.0, 14.0, 14.0],
+    hull: 40.0,
+    fuel: 5.0,
+    guns: &[LASER, LASER],
+    radius: 32.0,
+    bounty: 0,
+    cargo: 0,
+};
+
+pub static HAAHKA: Class = Class {
+    name: "Haahka",
+    role: "bulk freighter",
+    size: Size::Heavy,
+    max_speed: 160.0,
+    burner_speed: 260.0,
+    accel: 80.0,
+    turn_rate: 0.9,
+    energy: 120.0,
+    recharge: 18.0,
+    shield: 30.0,
+    shield_regen: 3.0,
+    armour: [30.0, 30.0, 30.0, 30.0],
+    hull: 90.0,
+    fuel: 3.0,
+    guns: &[LASER],
+    radius: 52.0,
+    bounty: 0,
+    cargo: 200,
+};
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Side {
     Player,
     Pirate,
+    /// a faction's militia, on patrol
+    Patrol,
+    /// a freighter going about its business
+    Trader,
 }
 
 /// What a pilot (person, autopilot or AI) asks of the ship this tick.
@@ -227,6 +274,8 @@ pub struct Ship {
     pub id: u32,
     pub class: &'static Class,
     pub side: Side,
+    /// whose ship it is (the player's ship counts as the Reach's own)
+    pub faction: Faction,
     pub callsign: String,
     pub pos: V2,
     pub vel: V2,
@@ -253,6 +302,7 @@ impl Ship {
             id,
             class,
             side,
+            faction: if side == Side::Pirate { Faction::Pirates } else { Faction::Coop },
             callsign: callsign.into(),
             pos,
             vel: V2::from_heading(heading) * (class.max_speed * 0.5),

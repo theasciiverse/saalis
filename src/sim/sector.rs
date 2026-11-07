@@ -6,6 +6,7 @@
 //! Names are placeholders until the Reach's own names are settled. Pallas is
 //! a real body and keeps its name.
 
+use super::faction::Faction;
 use super::rng::Rng;
 use super::v2::{v2, V2};
 
@@ -58,6 +59,8 @@ pub struct RegionDef {
     pub map: V2,
     /// 0 quiet .. 3 pirate country
     pub threat: u32,
+    /// who patrols it and runs its bases
+    pub owner: Faction,
     /// how many rocks
     pub rocks: u32,
     pub bases: Vec<BaseDef>,
@@ -76,17 +79,18 @@ fn base(name: &'static str, kind: BaseKind, x: f32, y: f32, radius: f32) -> Base
 impl Sector {
     pub fn reach() -> Sector {
         use BaseKind::*;
-        let r = |name, note, mx, my, threat, rocks, bases| RegionDef { name, note, map: v2(mx, my), threat, rocks, bases };
+        use Faction::*;
+        let r = |name, note, mx, my, threat, owner, rocks, bases| RegionDef { name, note, map: v2(mx, my), threat, owner, rocks, bases };
         let regions = vec![
-            r("Pallas Reach", "the Reach's heart, round Pallas", 0.50, 0.55, 1, 26, vec![base("Routa Station", Hub, 0.0, 0.0, 260.0)]),
-            r("Kide Drift", "ice and rare earths, thin patrols", 0.30, 0.42, 1, 34, vec![base("Kide Mine", Mine, 2600.0, -1800.0, 200.0)]),
-            r("Halla Shoal", "where the Reach's ore is smelted", 0.70, 0.40, 1, 22, vec![base("Halla Refinery", Refinery, -1500.0, 2200.0, 240.0)]),
-            r("Vaskivuori", "a mountain of copper, slowly eaten", 0.18, 0.62, 2, 40, vec![base("Vaski Works", Mine, 0.0, 3000.0, 220.0)]),
-            r("Lumi Field", "greenhouses on the ice", 0.82, 0.62, 1, 18, vec![base("Lumi Farm", Farm, 2000.0, 1000.0, 230.0)]),
-            r("Revontuli Gap", "no stations, no law, good salvage", 0.45, 0.20, 3, 30, vec![]),
-            r("Sisu Hollow", "the Reach's only hospital", 0.62, 0.78, 1, 16, vec![base("Sisu Clinic", Clinic, -2200.0, -1200.0, 200.0)]),
-            r("Kalmisto", "a field of wrecks; nobody asks", 0.12, 0.30, 3, 44, vec![]),
-            r("Crown Gate", "the lane down to the low belt", 0.45, 0.92, 0, 12, vec![base("Gate Customs", Customs, 0.0, 0.0, 280.0)]),
+            r("Pallas Reach", "the Reach's heart, round Pallas", 0.50, 0.55, 1, Coop, 26, vec![base("Routa Station", Hub, 0.0, 0.0, 260.0)]),
+            r("Kide Drift", "ice and rare earths, thin patrols", 0.30, 0.42, 1, Coop, 34, vec![base("Kide Mine", Mine, 2600.0, -1800.0, 200.0)]),
+            r("Halla Shoal", "where the Reach's ore is smelted", 0.70, 0.40, 1, Crown, 22, vec![base("Halla Refinery", Refinery, -1500.0, 2200.0, 240.0)]),
+            r("Vaskivuori", "a mountain of copper, slowly eaten", 0.18, 0.62, 2, Coop, 40, vec![base("Vaski Works", Mine, 0.0, 3000.0, 220.0)]),
+            r("Lumi Field", "greenhouses on the ice", 0.82, 0.62, 1, Coop, 18, vec![base("Lumi Farm", Farm, 2000.0, 1000.0, 230.0)]),
+            r("Revontuli Gap", "no stations, no law, good salvage", 0.45, 0.20, 3, Pirates, 30, vec![]),
+            r("Sisu Hollow", "the Reach's only hospital", 0.62, 0.78, 1, Traders, 16, vec![base("Sisu Clinic", Clinic, -2200.0, -1200.0, 200.0)]),
+            r("Kalmisto", "a field of wrecks; nobody asks", 0.12, 0.30, 3, Pirates, 44, vec![]),
+            r("Crown Gate", "the lane down to the low belt", 0.45, 0.92, 0, Inner, 12, vec![base("Gate Customs", Customs, 0.0, 0.0, 280.0)]),
         ];
         let lanes = vec![(0, 1), (0, 2), (0, 6), (0, 8), (1, 3), (1, 5), (1, 7), (2, 4), (2, 5), (3, 7), (4, 6), (6, 8)];
         Sector { regions, lanes }

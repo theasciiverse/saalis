@@ -10,7 +10,7 @@ use super::{Phase, World, PLAYER};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-const FORMAT: u32 = 1;
+const FORMAT: u32 = 2;
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct Save {
@@ -27,6 +27,7 @@ pub struct Save {
     pub kills: u32,
     pub encounters: u32,
     pub markets: Vec<Market>,
+    pub standing: super::faction::Standing,
 }
 
 /// Where saves live: `SAALIS_DATA_DIR`, or the platform's data folder.
@@ -67,6 +68,7 @@ impl World {
             kills: self.kills,
             encounters: self.encounters,
             markets: self.markets.clone(),
+            standing: self.standing.clone(),
         })
     }
 
@@ -88,6 +90,7 @@ impl World {
         w.paid = s.paid;
         w.kills = s.kills;
         w.encounters = s.encounters;
+        w.standing = s.standing;
         let mut p = Ship::new(PLAYER, &ship::TIIRA, Side::Player, "you", w.bases[s.base].pos, 0.0);
         p.armour = s.armour;
         p.hull = s.hull.max(1.0);

@@ -35,7 +35,6 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &App) {
         Line::from(Span::styled(base.name, Style::default().fg(pal::TRAFFIC).add_modifier(Modifier::BOLD))),
         Line::from(Span::styled(format!("{} · {}", base.kind.name(), w.region_name()), dim)),
         Line::from(Span::styled(w.date(), dim)),
-        Line::from(""),
     ];
     for row in BAY {
         lines.push(Line::from(Span::styled(row, Style::default().fg(pal::WIRE))));
@@ -48,9 +47,15 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &App) {
         Line::from(vec![Span::styled("hold     ", dim), Span::styled(format!("{} / {}", w.cargo_used(), max), Style::default().fg(pal::TEXT))]),
         Line::from(vec![Span::styled("repairs  ", dim), Span::styled(if cost == 0 { "none needed".to_string() } else { format!("{cost} cr") }, Style::default().fg(pal::TEXT))]),
         Line::from(""),
-        Line::from(Span::styled("R repair · F save", dim)),
-        Line::from(Span::styled("Enter launch · Esc quit", dim)),
+        Line::from(Span::styled("STANDING", dim)),
     ]);
+    for f in crate::sim::faction::ALL {
+        let v = w.standing.of(f);
+        let word = crate::sim::faction::Standing::word(v);
+        let col = if v <= crate::sim::faction::HOSTILE { Color::Rgb(240, 110, 100) } else { pal::rgb(pal::faction(f)) };
+        lines.push(Line::from(vec![Span::styled(format!("{:<18}", f.name()), Style::default().fg(col)), Span::styled(word, dim)]));
+    }
+
     Paragraph::new(lines).render(inner, buf);
 
     let block = frame("exchange");
@@ -86,6 +91,7 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &App) {
     }
     rows.push(Line::from(""));
     rows.push(Line::from(Span::styled("↑↓ choose · → or B buy · ← or S sell · Shift: ten at a time", hdr)));
+    rows.push(Line::from(Span::styled("R repair · F save · Enter launch · Esc quit", hdr)));
     if let Some(note) = &app.dock_note {
         rows.push(Line::from(""));
         rows.push(Line::from(Span::styled(note.clone(), Style::default().fg(pal::TARGET))));

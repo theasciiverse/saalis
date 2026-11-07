@@ -18,8 +18,25 @@ pub enum Mode {
     Flee,
 }
 
+/// What a pilot is for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Role {
+    /// fights what its side fights; travels to its goal meanwhile
+    Fighter,
+    /// never picks a fight: runs from danger, otherwise flies its route
+    Trader,
+    /// keeps near its goal (set to a spot behind the player each tick) and
+    /// fights what threatens it
+    Escort,
+}
+
 #[derive(Clone, Debug)]
 pub struct Brain {
+    pub role: Role,
+    /// where it is headed when not fighting
+    pub goal: Option<V2>,
+    /// it reached its goal
+    pub arrived: bool,
     pub target: Option<u32>,
     pub mode: Mode,
     /// seconds left in a break
@@ -35,8 +52,14 @@ pub struct Brain {
 }
 
 impl Brain {
+    pub fn with_role(mut self, role: Role, goal: Option<V2>) -> Brain {
+        self.role = role;
+        self.goal = goal;
+        self
+    }
+
     pub fn new(skill: f32, flee_at: f32) -> Brain {
-        Brain { target: None, mode: Mode::Attack, timer: 0.0, skill: skill.clamp(0.0, 1.0), flee_at, jitter: V2::ZERO, jitter_t: 0.0, announced: false }
+        Brain { role: Role::Fighter, goal: None, arrived: false, target: None, mode: Mode::Attack, timer: 0.0, skill: skill.clamp(0.0, 1.0), flee_at, jitter: V2::ZERO, jitter_t: 0.0, announced: false }
     }
 }
 
@@ -95,9 +118,33 @@ pub fn think(brain: &mut Brain, me: &Ship, ships: &[Ship], obstacles: &[Obstacle
         brain.jitter_t = rng.range(0.4, 1.2);
     }
     let mut it = Intent::default();
-    let Some(t) = target else {
-        // nothing to fight: cruise on, gently
-        it.set_speed = Some(me.class.max_speed * 0.5);
+    // a trader with danger about runs from it
+    if brain.role == Role::Trader {
+        if let Some(t) = target {
+            it.turn = steer(me, (me.pos - t.pos).heading());
+            it.set_speed = Some(me.class.max_speed);
+            it.burner = true;
+            if let Some(turn) = avoid(me, obstacles) {
+                it.turn = turn;
+            }
+            return it;
+        }
+    }
+    let Some(t) = target.filter(|_| brain.role != Role::Trader) else {
+        // nothing to fight: fly the route, or cruise on gently
+        match brain.goal {
+            Some(g) => {
+                let to = g - me.pos;
+                if to.len() < 500.0 && brain.role != Role::Escort {
+                    brain.arrived = true;
+                }
+                it.turn = steer(me, to.heading());
+                let cruise = if brain.role == Role::Escort { (to.len() / 3.0).clamp(60.0, me.class.max_speed) } else { me.class.max_speed * 0.75 };
+                it.set_speed = Some(cruise);
+                it.burner = brain.role == Role::Escort && to.len() > 2500.0;
+            }
+            None => it.set_speed = Some(me.class.max_speed * 0.5),
+        }
         if let Some(turn) = avoid(me, obstacles) {
             it.turn = turn;
         }
@@ -178,6 +225,18 @@ mod tests {
         me.heading = 1.0;
         let it = think(&mut b, &me, &ships, &[], &mut Rng::new(3), 1.0 / 60.0);
         assert!(it.turn < 0.0 && !it.fire, "turned away: swing back left, hold fire");
+    }
+
+    #[test]
+    fn a_trader_runs_from_danger_and_otherwise_flies_its_route() {
+        let me = Ship::new(2, &crate::sim::ship::HAAHKA, Side::Trader, "t", V2::ZERO, 0.0);
+        let mut b = Brain::new(0.5, 1.0).with_role(Role::Trader, Some(v2(0.0, -5000.0)));
+        let it = think(&mut b, &me, std::slice::from_ref(&me), &[], &mut Rng::new(1), 1.0 / 60.0);
+        assert!(!it.fire && !it.burner && it.turn.abs() < 0.01, "straight on to its goal");
+        let pirate = Ship::new(3, &KARPPA, Side::Pirate, "p", v2(0.0, -800.0), 3.14);
+        b.target = Some(3);
+        let it = think(&mut b, &me, &[me.clone(), pirate], &[], &mut Rng::new(1), 1.0 / 60.0);
+        assert!(it.burner && !it.fire, "a pirate ahead: turn and run");
     }
 
     #[test]

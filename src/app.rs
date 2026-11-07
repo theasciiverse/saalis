@@ -12,6 +12,8 @@ pub enum Screen {
     Flight,
     Map,
     Dock,
+    /// hailing a ship
+    Comms,
 }
 
 pub struct App {
@@ -30,17 +32,19 @@ pub struct App {
     pub demo: bool,
     /// set when the person asked to quit from a menu
     pub ask_quit: bool,
+    /// the ship being hailed
+    pub hailing: Option<u32>,
 }
 
 impl App {
     pub fn new(world: World, screen: Screen, demo: bool) -> App {
         let saved = save::read().map(|s| save::describe(&s));
-        App { world, screen, map_sector: false, map_sel: 0, dock_row: 0, dock_note: None, saved, demo, ask_quit: false }
+        App { world, screen, map_sector: false, map_sel: 0, dock_row: 0, dock_note: None, saved, demo, ask_quit: false, hailing: None }
     }
 
     /// Whether keys go to a menu rather than to flight.
     pub fn in_menu(&self) -> bool {
-        matches!(self.screen, Screen::Map | Screen::Dock)
+        matches!(self.screen, Screen::Map | Screen::Dock | Screen::Comms)
     }
 
     pub fn new_game(&mut self, seed: u64) {
@@ -87,7 +91,7 @@ impl App {
                 }
             }
             Phase::Flying if self.screen == Screen::Dock => self.screen = Screen::Flight,
-            Phase::Lost if self.screen == Screen::Map => self.screen = Screen::Flight,
+            Phase::Lost if matches!(self.screen, Screen::Map | Screen::Comms) => self.screen = Screen::Flight,
             _ => {}
         }
     }
@@ -102,12 +106,46 @@ impl App {
         self.map_sel = self.world.nav.and_then(|n| navs.iter().position(|&x| x == n)).unwrap_or(0);
     }
 
-    /// A key on the map or at the dock.
+    /// C: hail the target, or the nearest ship.
+    pub fn open_comms(&mut self) {
+        if self.world.phase != Phase::Flying {
+            return;
+        }
+        match self.world.hail_target() {
+            Some(id) => {
+                self.hailing = Some(id);
+                self.screen = Screen::Comms;
+            }
+            None => self.world.say_note("Comms", "Nobody in range to hail."),
+        }
+    }
+
+    /// A key on the map, at the dock or on comms.
     pub fn menu_key(&mut self, k: KeyEvent) {
         match self.screen {
             Screen::Map => self.map_key(k),
             Screen::Dock => self.dock_key(k),
+            Screen::Comms => self.comms_key(k),
             _ => {}
+        }
+    }
+
+    fn comms_key(&mut self, k: KeyEvent) {
+        let Some(id) = self.hailing else {
+            self.screen = Screen::Flight;
+            return;
+        };
+        let n = self.world.hail_lines(id).len();
+        if let KeyCode::Char(c @ '1'..='9') = k.code {
+            let i = c as usize - '1' as usize;
+            if i < n {
+                self.world.hail(id, i);
+                self.screen = Screen::Flight;
+                self.hailing = None;
+            }
+        } else if matches!(k.code, KeyCode::Esc | KeyCode::Char('c') | KeyCode::Char('C')) {
+            self.screen = Screen::Flight;
+            self.hailing = None;
         }
     }
 

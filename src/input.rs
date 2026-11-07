@@ -148,7 +148,7 @@ pub struct Commands {
     pub land: bool,
     /// [ and ]: the previous or next nav point
     pub nav_step: i32,
-    /// C on the title: continue the saved game
+    /// C: continue the saved game on the title; hail in flight
     pub cont: bool,
 }
 

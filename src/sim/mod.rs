@@ -6,19 +6,21 @@
 pub mod ai;
 pub mod cue;
 pub mod econ;
+pub mod faction;
 pub mod rng;
 pub mod save;
 pub mod sector;
 pub mod ship;
 pub mod v2;
 
-use ai::{Brain, Obstacle};
+use ai::{Brain, Obstacle, Role};
 use cue::Cue;
 use econ::Market;
+use faction::{Faction, Standing};
 use rng::Rng;
 use sector::{BaseKind, Sector};
 use ship::{Class, Intent, Ship, Side, Size, Struck};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use v2::{v2, V2};
 
 pub const PLAYER: u32 = 1;
@@ -46,6 +48,7 @@ pub struct Shot {
     pub vel: V2,
     pub owner: u32,
     pub side: Side,
+    pub faction: Faction,
     pub damage: f32,
     /// metres left to fly
     pub left: f32,
@@ -138,6 +141,9 @@ pub struct World {
     pub markets: Vec<Market>,
     pub credits: u32,
     pub cargo: [u32; econ::N],
+    pub standing: Standing,
+    /// ships the player has fired on, which now fight back
+    pub angry: HashSet<u32>,
     /// what the player paid per unit, on average, for what is in the hold
     pub paid: [u32; econ::N],
     pub ships: Vec<Ship>,
@@ -192,6 +198,8 @@ impl World {
             markets,
             credits: START_CREDITS,
             cargo: [0; econ::N],
+            standing: Standing::default(),
+            angry: HashSet::new(),
             paid: [0; econ::N],
             ships: Vec::new(),
             brains: HashMap::new(),
@@ -266,8 +274,22 @@ impl World {
         self.ships.iter().find(|s| s.id == id && s.alive)
     }
 
+    /// Ships that will attack the player: pirates, ships the player has
+    /// fired on, and patrols of factions that hate the player.
     pub fn hostiles(&self) -> impl Iterator<Item = &Ship> {
-        self.ships.iter().filter(|s| s.alive && s.side == Side::Pirate)
+        self.ships.iter().filter(|s| self.hostile_to_player(s))
+    }
+
+    pub fn hostile_to_player(&self, s: &Ship) -> bool {
+        s.alive
+            && s.id != PLAYER
+            && s.side != Side::Trader
+            && (s.side == Side::Pirate || self.angry.contains(&s.id) || self.standing.of(s.faction) <= faction::HOSTILE)
+    }
+
+    /// The owner of the current region.
+    pub fn owner(&self) -> Faction {
+        self.sector.regions[self.region].owner
     }
 
     /// Hostiles within `range` of the player.
@@ -322,6 +344,11 @@ impl World {
             self.comms.remove(0);
         }
         self.cues.push(Cue::Comms);
+    }
+
+    /// A line from the player's own ship systems.
+    pub fn say_note(&mut self, from: &str, text: &str) {
+        self.say(from.to_string(), text.to_string(), Some(Side::Player));
     }
 
     /// A message from the nearest base's traffic control, or the lane
@@ -455,6 +482,8 @@ impl World {
             self.say_traffic(format!("Come within {} m to land.", LANDING_RANGE as u32));
         } else if speed > LANDING_SPEED {
             self.say_traffic(format!("Too fast. Under {} to land.", LANDING_SPEED as u32));
+        } else if self.standing.of(self.owner()) <= faction::BANNED {
+            self.say_traffic("You're not welcome here. Clear the approach.");
         } else if self.hostiles_near(3000.0) {
             self.say_traffic("Not with company on your tail.");
         } else {
@@ -580,11 +609,167 @@ impl World {
         true
     }
 
+    // --- comms ---------------------------------------------------------
+
+    /// Who C hails: the target, or the nearest ship within 6 km.
+    pub fn hail_target(&self) -> Option<u32> {
+        let me = self.player()?;
+        self.target.filter(|t| self.ship(*t).is_some()).or_else(|| {
+            self.ships
+                .iter()
+                .filter(|s| s.alive && s.id != PLAYER && (s.pos - me.pos).len() < 6000.0)
+                .min_by(|a, b| (a.pos - me.pos).len().total_cmp(&(b.pos - me.pos).len()))
+                .map(|s| s.id)
+        })
+    }
+
+    /// The pirates the player is up against: those within 6 km.
+    fn pack(&self) -> Vec<u32> {
+        let Some(me) = self.player() else { return Vec::new() };
+        self.ships.iter().filter(|s| s.alive && s.side == Side::Pirate && (s.pos - me.pos).len() < 6000.0).map(|s| s.id).collect()
+    }
+
+    fn bribe(&self) -> u32 {
+        120 * self.pack().len().max(1) as u32
+    }
+
+    /// What the player can say to ship `id`.
+    pub fn hail_lines(&self, id: u32) -> Vec<String> {
+        let Some(s) = self.ship(id) else { return Vec::new() };
+        match s.side {
+            Side::Pirate => vec![
+                "Leave me be. Nothing in my hold is worth the fight.".into(),
+                format!("Take {} cr and go.", self.bribe()),
+                "Come and try it.".into(),
+            ],
+            Side::Patrol if self.hostile_to_player(s) => vec!["Hold your fire! It was a mistake.".into()],
+            Side::Patrol => vec!["Anything moving out here?".into(), "Requesting an escort.".into()],
+            Side::Trader => vec!["Where's the money this week?".into(), "Fly safe.".into()],
+            Side::Player => Vec::new(),
+        }
+    }
+
+    /// Says line `choice` to ship `id`; the answer comes over comms.
+    pub fn hail(&mut self, id: u32, choice: usize) {
+        let Some(s) = self.ship(id).cloned() else { return };
+        log::info!("hail {} choice {choice}", s.callsign);
+        let from = s.callsign.clone();
+        let voice = Some(s.side);
+        match (s.side, choice) {
+            (Side::Pirate, 0) => {
+                let empty = self.cargo_used() < 5;
+                let chance = if empty { 0.55 } else { 0.2 };
+                if self.rng.chance(chance) {
+                    self.say(from, "Empty hulls aren't worth the fuel. Go on, then.", voice);
+                    self.call_off();
+                } else {
+                    self.say(from, "We'll see what's in it ourselves.", voice);
+                }
+            }
+            (Side::Pirate, 1) => {
+                let price = self.bribe();
+                if self.credits >= price {
+                    self.credits -= price;
+                    self.standing.shift(Faction::Pirates, 3);
+                    self.say(from, "Pleasure doing business. Off you go.", voice);
+                    self.call_off();
+                } else {
+                    self.say(from, "You haven't got it. Pity.", voice);
+                }
+            }
+            (Side::Pirate, _) => {
+                for id in self.pack() {
+                    if let Some(b) = self.brains.get_mut(&id) {
+                        b.flee_at = 0.0;
+                        b.mode = ai::Mode::Attack;
+                    }
+                }
+                self.say(from, "Ha! Your funeral.", voice);
+            }
+            (Side::Patrol, 0) if self.hostile_to_player(&s) => {
+                let f = s.faction;
+                if self.standing.of(f) > faction::HOSTILE && self.rng.chance(0.5) {
+                    self.angry.remove(&id);
+                    self.say(from, "Fine. Watch where you point those guns.", voice);
+                } else {
+                    self.say(from, "Too late for that.", voice);
+                }
+            }
+            (Side::Patrol, 0) => {
+                let line = self.rumour();
+                self.say(from, line, voice);
+            }
+            (Side::Patrol, _) => {
+                if self.standing.of(s.faction) >= 25 {
+                    if let Some(b) = self.brains.get_mut(&id) {
+                        b.role = Role::Escort;
+                    }
+                    self.say(from, "On your wing until you leave the region.", voice);
+                } else {
+                    self.say(from, "We don't know you well enough. Earn it.", voice);
+                }
+            }
+            (Side::Trader, 0) => {
+                let tip = self.tip();
+                self.say(from, tip, voice);
+            }
+            (Side::Trader, _) => {
+                self.standing.shift(Faction::Traders, 1);
+                self.say(from, "And you. Watch the Gap.", voice);
+            }
+            _ => {}
+        }
+    }
+
+    /// Every pirate nearby breaks off and runs.
+    fn call_off(&mut self) {
+        for id in self.pack() {
+            if let Some(b) = self.brains.get_mut(&id) {
+                b.mode = ai::Mode::Flee;
+                b.flee_at = 1.0;
+                b.announced = true;
+            }
+        }
+    }
+
+    /// A patrol's news: how quiet this region is, and a word on the Reach.
+    fn rumour(&mut self) -> String {
+        let here = match self.sector.regions[self.region].threat {
+            0 => "Quiet as a tomb here.",
+            1 => "A few claim-jumpers, nothing we can't handle.",
+            2 => "Busy. Keep your shields up.",
+            _ => "You're on your own out here. We don't come this far.",
+        };
+        const MORE: [&str; 4] = [
+            "Kalmisto's crawling with them this week.",
+            "Customs at the Gate are checking holds again.",
+            "Halla's paying over the odds for ore.",
+            "Revontuli Gap's no place to fly alone.",
+        ];
+        format!("{here} {}", MORE[self.rng.below(MORE.len() as u32) as usize])
+    }
+
+    /// A trader's tip: where one good sells best right now.
+    fn tip(&mut self) -> String {
+        let g = self.rng.below(econ::N as u32) as usize;
+        let all = self.sector.all_bases();
+        let best = (0..self.markets.len()).max_by_key(|&m| self.markets[m].sell_price(g));
+        match best {
+            Some(m) => {
+                let (r, b) = all[m];
+                let base = self.sector.regions[r].bases[b].name;
+                format!("{} fetches {} at {base}.", econ::GOODS[g].name, self.markets[m].sell_price(g))
+            }
+            None => "Nothing worth the fuel.".into(),
+        }
+    }
+
     // --- the player's own targeting ----------------------------------
 
+    /// T: every ship in turn, nearest first.
     pub fn cycle_target(&mut self) {
         let Some(me) = self.player() else { return };
-        let mut ids: Vec<(f32, u32)> = self.hostiles().map(|s| ((s.pos - me.pos).len(), s.id)).collect();
+        let mut ids: Vec<(f32, u32)> = self.ships.iter().filter(|s| s.alive && s.id != PLAYER).map(|s| ((s.pos - me.pos).len(), s.id)).collect();
         ids.sort_by(|a, b| a.0.total_cmp(&b.0));
         let next = match self.target.and_then(|t| ids.iter().position(|&(_, id)| id == t)) {
             Some(i) => ids.get((i + 1) % ids.len()).map(|x| x.1),
@@ -596,9 +781,14 @@ impl World {
         self.target = next;
     }
 
+    /// R: the nearest hostile.
     pub fn nearest_target(&mut self) {
-        self.target = None;
-        self.cycle_target();
+        let Some(me) = self.player() else { return };
+        let next = self.hostiles().min_by(|a, b| (a.pos - me.pos).len().total_cmp(&(b.pos - me.pos).len())).map(|s| s.id);
+        if next.is_some() && next != self.target {
+            self.cues.push(Cue::Target);
+        }
+        self.target = next;
     }
 
     pub fn match_speed(&self) -> Option<f32> {
@@ -630,7 +820,22 @@ impl World {
             let it = if s.id == PLAYER {
                 if self.autopilot { Intent { set_speed: Some(s.set_speed), ..Default::default() } } else { *player }
             } else if let Some(b) = self.brains.get_mut(&s.id) {
-                b.target = player_pos.map(|_| PLAYER);
+                // the nearest enemy in reach; a trader only looks for danger;
+                // an escort fights what comes near the player
+                let reach = match b.role {
+                    Role::Trader => 2500.0,
+                    _ => 6000.0,
+                };
+                let centre = if b.role == Role::Escort { player_pos.unwrap_or(s.pos) } else { s.pos };
+                b.target = self
+                    .ships
+                    .iter()
+                    .filter(|o| (o.pos - centre).len() < reach && fights_of(&self.standing, &self.angry, o, s))
+                    .min_by(|x, y| (x.pos - s.pos).len().total_cmp(&(y.pos - s.pos).len()))
+                    .map(|o| o.id);
+                if b.role == Role::Escort {
+                    b.goal = self.ships.first().filter(|p| p.alive).map(|p| p.pos - p.forward() * 250.0 + p.forward().right() * 120.0);
+                }
                 ai::think(b, s, &self.ships, &obstacles, &mut self.rng, dt)
             } else {
                 Intent::default()
@@ -660,6 +865,7 @@ impl World {
                         vel: s.vel + fwd * gun.speed,
                         owner: s.id,
                         side: s.side,
+                        faction: s.faction,
                         damage: gun.damage,
                         left: gun.range,
                     });
@@ -747,7 +953,11 @@ impl World {
             let step = sh.vel * dt;
             sh.pos += step;
             sh.left -= step.len();
-            let hit = self.ships.iter().position(|s| s.alive && s.side != sh.side && seg_hits(from, sh.pos, s.pos, s.class.radius));
+            // anything but the shooter and its own faction's other ships
+            let owner_npc = sh.owner != PLAYER;
+            let hit = self.ships.iter().position(|s| {
+                s.alive && s.id != sh.owner && !(owner_npc && s.id != PLAYER && s.faction == sh.faction) && seg_hits(from, sh.pos, s.pos, s.class.radius)
+            });
             if let Some(i) = hit {
                 self.hit(i, sh);
                 return false;
@@ -777,6 +987,15 @@ impl World {
             self.cues.push(if struck == Struck::Shield { Cue::ShieldHit } else { Cue::ArmourHit });
         } else if sh.owner == PLAYER {
             self.cues.push(Cue::HitConfirm);
+            let s = &self.ships[i];
+            if s.side != Side::Pirate {
+                let (f, callsign, first) = (s.faction, s.callsign.clone(), self.angry.insert(id));
+                self.standing.shift(f, -3);
+                if first {
+                    log::info!("player fired on {callsign} ({:?})", f);
+                    self.say(callsign, "You'll answer for that!", Some(s_side(f)));
+                }
+            }
         }
         if struck == Struck::Destroyed {
             self.destroyed(i, sh.owner);
@@ -799,9 +1018,20 @@ impl World {
             return;
         }
         self.cues.push(if big { Cue::BigKill } else { Cue::Kill });
+        if by == PLAYER && s.side != Side::Pirate {
+            self.standing.shift(s.faction, -25);
+            log::info!("player destroyed a {:?} ship", s.faction);
+            return;
+        }
         if by == PLAYER {
             self.kills += 1;
             self.credits += s.class.bounty;
+            self.standing.shift(Faction::Pirates, -3);
+            self.standing.shift(Faction::Traders, 1);
+            let owner = self.owner();
+            if owner != Faction::Pirates {
+                self.standing.shift(owner, 2);
+            }
             let line = KILLED[self.rng.below(KILLED.len() as u32) as usize].replace("{}", s.class.name);
             self.say_traffic(format!("{line} {} cr paid.", s.class.bounty));
         }
@@ -879,12 +1109,18 @@ impl World {
     /// The dead are cleared; pirates that ran far enough leave the region.
     fn tidy(&mut self) {
         let player_pos = self.player().map(|p| p.pos);
+        let arrived: HashSet<u32> = self.brains.iter().filter(|(_, b)| b.arrived).map(|(id, _)| *id).collect();
         for s in &mut self.ships {
-            if s.alive && s.side == Side::Pirate && player_pos.is_some_and(|p| (s.pos - p).len() > LEAVE_RANGE) {
+            if s.id == PLAYER || !s.alive {
+                continue;
+            }
+            let far = player_pos.is_some_and(|p| (s.pos - p).len() > if s.side == Side::Pirate { LEAVE_RANGE } else { LEAVE_RANGE * 2.0 });
+            if far || arrived.contains(&s.id) {
                 s.alive = false;
                 log::info!("{} left the region", s.callsign);
             }
         }
+        self.angry.retain(|id| self.ships.iter().any(|s| s.id == *id && s.alive));
         self.ships.retain(|s| s.alive || s.id == PLAYER);
         let ids: Vec<u32> = self.ships.iter().map(|s| s.id).collect();
         self.brains.retain(|id, _| ids.contains(id));
@@ -906,6 +1142,9 @@ impl World {
 
     /// Claim-jumpers turn up now and then, more often where the threat is
     /// higher; never in the quiet regions.
+    /// Now and then someone turns up: claim-jumpers (more often where the
+    /// threat is higher, never in quiet regions), the owner's patrols, or a
+    /// freighter on its run.
     fn encounter(&mut self, dt: f32) {
         if self.phase != Phase::Flying || self.hostiles().next().is_some() {
             return;
@@ -914,11 +1153,66 @@ impl World {
         if self.encounter_t > 0.0 {
             return;
         }
-        let threat = self.sector.regions[self.region].threat.max(1) as f32;
-        self.encounter_t = if self.busy { 8.0 } else { self.rng.range(50.0, 120.0) / threat };
-        if self.sector.regions[self.region].threat > 0 || self.busy {
+        let threat = self.sector.regions[self.region].threat as f32;
+        self.encounter_t = if self.busy { 8.0 } else { self.rng.range(35.0, 80.0) };
+        if self.busy {
             self.spawn_encounter();
+            return;
         }
+        let owner = self.owner();
+        let patrol = if owner == Faction::Pirates { 0.0 } else { 1.2 };
+        let trade = if self.bases.is_empty() { 0.4 } else { 1.4 };
+        let roll = self.rng.range(0.0, threat + patrol + trade);
+        if roll < threat {
+            self.spawn_encounter();
+        } else if roll < threat + patrol {
+            self.spawn_traveller(Side::Patrol, owner);
+        } else {
+            self.spawn_traveller(Side::Trader, Faction::Traders);
+        }
+    }
+
+    /// A patrol pair or a freighter: in at one nav point, out at another.
+    fn spawn_traveller(&mut self, side: Side, faction: Faction) {
+        let navs = self.navs();
+        if navs.len() < 2 {
+            return;
+        }
+        let a = self.rng.below(navs.len() as u32) as usize;
+        let mut b = self.rng.below(navs.len() as u32 - 1) as usize;
+        if b >= a {
+            b += 1;
+        }
+        let (from, to) = (self.nav_pos(navs[a]), self.nav_pos(navs[b]));
+        let start = match navs[a] {
+            Nav::Base(i) => from + v2(0.0, -(self.bases[i].radius + 300.0)),
+            Nav::Mouth(_) => from,
+        };
+        let heading = (to - start).heading();
+        let crew: Vec<&'static Class> = match side {
+            Side::Trader if self.rng.chance(0.4) => vec![&ship::HAAHKA, &ship::KOTKA],
+            Side::Trader => vec![&ship::HAAHKA],
+            _ => vec![&ship::KOTKA, &ship::KOTKA],
+        };
+        for (k, class) in crew.iter().enumerate() {
+            let id = self.next_id;
+            self.next_id += 1;
+            let pos = start + V2::from_heading(heading + 1.57) * (k as f32 * 160.0);
+            let name = callsign(&mut self.rng);
+            let (prefix, role) = match (side, std::ptr::eq(*class, &ship::KOTKA)) {
+                (Side::Trader, false) => ("Freighter", Role::Trader),
+                (Side::Trader, true) => ("Escort", Role::Fighter),
+                _ => (faction_prefix(faction), Role::Fighter),
+            };
+            let ship_side = if std::ptr::eq(*class, &ship::HAAHKA) { Side::Trader } else { Side::Patrol };
+            let mut s = Ship::new(id, class, ship_side, format!("{prefix} {name}"), pos, heading);
+            s.faction = faction;
+            s.vel = V2::from_heading(heading) * class.max_speed * 0.6;
+            let goal = to + (pos - start);
+            self.brains.insert(id, Brain::new(0.6, if role == Role::Trader { 1.0 } else { 0.25 }).with_role(role, Some(goal)));
+            self.ships.push(s);
+        }
+        log::info!("{:?} {:?} passing through {}", side, faction, self.region_name());
     }
 
     /// The make-up of the `n`th encounter in a region of `threat`.
@@ -1011,6 +1305,36 @@ impl World {
             None => common,
         }
     }
+}
+
+/// `World::fights` without borrowing the world: whether `a` would fight `b`.
+fn fights_of(standing: &Standing, angry: &HashSet<u32>, a: &Ship, b: &Ship) -> bool {
+    let against_player = |s: &Ship| s.alive && s.id != PLAYER && s.side != Side::Trader && (s.side == Side::Pirate || angry.contains(&s.id) || standing.of(s.faction) <= faction::HOSTILE);
+    if !a.alive || !b.alive || a.id == b.id {
+        return false;
+    }
+    if a.id == PLAYER {
+        return against_player(b);
+    }
+    if b.id == PLAYER {
+        return against_player(a);
+    }
+    a.faction.at_war(b.faction)
+}
+
+fn faction_prefix(f: Faction) -> &'static str {
+    match f {
+        Faction::Coop => "Watch",
+        Faction::Crown => "Crown",
+        Faction::Traders => "Guild",
+        Faction::Inner => "Customs",
+        Faction::Pirates => "Raider",
+    }
+}
+
+/// The comms colour for a faction's voice.
+fn s_side(f: Faction) -> Side {
+    if f == Faction::Pirates { Side::Pirate } else { Side::Patrol }
 }
 
 /// Whether the segment a..b passes within `r` of `c`.
@@ -1115,6 +1439,52 @@ mod tests {
         let mut w = World::new(3);
         w.credits = 1_000_000;
         assert_eq!(w.buy(0, 100), ship::TIIRA.cargo);
+    }
+
+    #[test]
+    fn patrols_fight_pirates_and_leave_the_player_alone() {
+        let mut w = World::new(11);
+        w.launch();
+        w.encounter_t = f32::INFINITY;
+        w.spawn_traveller(Side::Patrol, Faction::Coop);
+        assert_eq!(w.hostiles().count(), 0, "a friendly patrol is no threat");
+        // put the patrol near the player, then bring in claim-jumpers
+        let p = w.ships[0].pos;
+        for s in w.ships.iter_mut().skip(1) {
+            s.pos = p + v2(400.0, 0.0);
+        }
+        w.spawn_encounter();
+        let pirates: Vec<u32> = w.hostiles().map(|s| s.id).collect();
+        let hp0: f32 = w.hostiles().map(|s| s.hull + s.armour.iter().sum::<f32>() + s.shields.iter().sum::<f32>()).sum();
+        fly(&mut w, 40.0);
+        let hp1: f32 = w.ships.iter().filter(|s| pirates.contains(&s.id)).map(|s| s.hull + s.armour.iter().sum::<f32>() + s.shields.iter().sum::<f32>()).sum();
+        assert!(hp1 < hp0, "the patrol (and only the patrol) wore the pirates down");
+    }
+
+    #[test]
+    fn shooting_a_patrol_makes_enemies() {
+        let mut w = World::new(11);
+        w.launch();
+        w.encounter_t = f32::INFINITY;
+        w.spawn_traveller(Side::Patrol, Faction::Coop);
+        let id = w.ships[1].id;
+        let before = w.standing.of(Faction::Coop);
+        let sh = Shot { pos: w.ships[1].pos, vel: v2(0.0, 100.0), owner: PLAYER, side: Side::Player, faction: Faction::Coop, damage: 1.0, left: 100.0 };
+        w.hit(1, &sh);
+        assert!(w.standing.of(Faction::Coop) < before);
+        assert!(w.hostiles().any(|s| s.id == id), "it fights back now");
+    }
+
+    #[test]
+    fn a_bribe_sends_them_away() {
+        let mut w = World::demo(4);
+        fly(&mut w, 5.0);
+        let id = w.hostiles().next().map(|s| s.id).expect("pirates");
+        w.ships[0].pos = w.ship(id).unwrap().pos + v2(2000.0, 0.0);
+        let credits = w.credits;
+        w.hail(id, 1);
+        assert!(w.credits < credits);
+        assert!(w.fleeing(id));
     }
 
     #[test]

@@ -14,7 +14,7 @@
 use super::canvas::Canvas;
 use super::palette::{self as pal, rgb, Rgb};
 use super::view::View;
-use crate::sim::ship::{Class, Ship, Side, Size, AHMA, KARHU, KARPPA};
+use crate::sim::ship::{Class, Ship, Side, Size, AHMA, HAAHKA, KARHU, KARPPA, KOTKA};
 use ratatui::buffer::Buffer;
 use ratatui::style::{Color, Modifier, Style};
 
@@ -46,6 +46,10 @@ pub fn glyph_of(c: &Class) -> char {
         'H'
     } else if std::ptr::eq(c, &KARHU) {
         'M'
+    } else if std::ptr::eq(c, &KOTKA) {
+        'A'
+    } else if std::ptr::eq(c, &HAAHKA) {
+        'O'
     } else {
         '#'
     }
@@ -63,7 +67,7 @@ fn nose_len(c: &Class) -> f32 {
 fn colours(s: &Ship) -> (Rgb, Rgb) {
     match s.side {
         Side::Player => (pal::PLAYER, (255, 255, 255)),
-        Side::Pirate => (pal::PIRATE, (255, 235, 235)),
+        _ => (pal::faction(s.faction), (255, 245, 240)),
     }
 }
 
@@ -124,6 +128,10 @@ pub fn schematic(c: &Class) -> &'static [&'static str] {
         &["  ╱╲  ", "┌─┤├─┐", "╵ ╰╯ ╵"]
     } else if std::ptr::eq(c, &KARHU) {
         &["   ╱╲   ", "╶──┤├──╴", "╶──┤├──╴", "   ╰╯   "]
+    } else if std::ptr::eq(c, &KOTKA) {
+        &["  ╱╲  ", "╱─┤├─╲", "  ╰╯  "]
+    } else if std::ptr::eq(c, &HAAHKA) {
+        &[" ╭──╮ ", " │▫▫│ ", " │▫▫│ ", " ╰┬┬╯ "]
     } else {
         &[" ╱╲ ", "─┤├─", " ╰╯ "]
     }
@@ -143,7 +151,7 @@ mod tests {
 
     #[test]
     fn every_hull_has_its_own_glyph() {
-        let g: Vec<char> = [&crate::sim::ship::TIIRA, &KARPPA, &AHMA, &KARHU].iter().map(|c| glyph_of(c)).collect();
+        let g: Vec<char> = [&crate::sim::ship::TIIRA, &KARPPA, &AHMA, &KARHU, &KOTKA, &HAAHKA].iter().map(|c| glyph_of(c)).collect();
         let mut u = g.clone();
         u.dedup();
         assert_eq!(g.len(), u.len());

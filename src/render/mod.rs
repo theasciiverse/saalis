@@ -100,6 +100,9 @@ pub fn draw_buf(buf: &mut Buffer, area: Rect, ui: &Ui) {
         if app.screen == Screen::Map {
             navmap::draw(buf, wide, app, ui.aspect);
         }
+        if app.screen == Screen::Comms {
+            comms(buf, l.field, app);
+        }
     }
 
     if app.screen == Screen::Title {
@@ -149,6 +152,23 @@ fn title(buf: &mut Buffer, field: Rect, saved: Option<&str>) {
     card(buf, field, "", &lines);
 }
 
+fn comms(buf: &mut Buffer, field: Rect, app: &App) {
+    let w = &app.world;
+    let Some(s) = app.hailing.and_then(|id| w.ship(id)) else { return };
+    let col = pal::rgb(pal::faction(s.faction));
+    let mut lines = vec![
+        Line::from(Span::styled(s.callsign.clone(), Style::default().fg(col).add_modifier(Modifier::BOLD))),
+        Line::from(Span::styled(format!("{} · {}", s.faction.name(), s.class.role), Style::default().fg(pal::DIM))),
+        Line::from(""),
+    ];
+    for (i, l) in w.hail_lines(s.id).iter().enumerate() {
+        lines.push(Line::from(vec![Span::styled(format!("{} ", i + 1), Style::default().fg(pal::TARGET)), Span::styled(l.clone(), Style::default().fg(pal::TEXT))]));
+    }
+    lines.push(Line::from(""));
+    lines.push(Line::from(Span::styled("a number says it · Esc hangs up", Style::default().fg(pal::DIM))));
+    card(buf, field, "comms", &lines);
+}
+
 fn lost(buf: &mut Buffer, field: Rect, w: &crate::sim::World, demo: bool, saved: bool) {
     let mut lines = vec![
         Line::from(Span::styled("SHIP LOST", Style::default().fg(pal::TARGET).add_modifier(Modifier::BOLD))),
@@ -163,7 +183,7 @@ fn lost(buf: &mut Buffer, field: Rect, w: &crate::sim::World, demo: bool, saved:
     card(buf, field, "", &lines);
 }
 
-const KEYS: [(&str, &str); 20] = [
+const KEYS: [(&str, &str); 21] = [
     ("← →  A D", "turn"),
     ("↑ ↓  W S", "throttle up, down"),
     ("Home", "full speed"),
@@ -178,6 +198,7 @@ const KEYS: [(&str, &str); 20] = [
     ("G", "autopilot to the nav point"),
     ("J", "jump through a lane mouth"),
     ("L", "land at a base (close and slow)"),
+    ("C", "hail the target or the nearest ship"),
     ("P", "pause"),
     ("F8", "sound on, off"),
     ("F1", "these keys"),
@@ -201,7 +222,7 @@ mod tests {
     use crate::sim::World;
 
     fn app(w: World, screen: Screen) -> App {
-        App { world: w, screen, map_sector: false, map_sel: 0, dock_row: 0, dock_note: None, saved: None, demo: false, ask_quit: false }
+        App { world: w, screen, map_sector: false, map_sel: 0, dock_row: 0, dock_note: None, saved: None, demo: false, ask_quit: false, hailing: None }
     }
 
     fn ui(a: &App) -> Ui<'_> {

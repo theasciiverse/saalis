@@ -281,6 +281,8 @@ fn run(terminal: &mut DefaultTerminal, kitty: bool, args: &Args, mut audio: audi
                     }
                     if cmd.map {
                         app.open_map();
+                    } else if cmd.cont {
+                        app.open_comms();
                     }
                     it
                 } else {
