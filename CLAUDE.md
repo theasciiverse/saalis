@@ -185,5 +185,9 @@ RNG.
       (such as Rhai). Deferred by David 2026-11-07: review later.
 - [ ] Subtitle and motto, if any
 - [ ] Trademark checks (EUIPO, PRH, USPTO) before announcing
-- [ ] The general `games/CLAUDE.md` that sibling repos cite is not on
-      this machine
+- [ ] The house rules (session logging and so on) are in the top-level
+      `asciiverse/CLAUDE.md` on beast. Sibling repos cite it as
+      `../../CLAUDE.md` from `games/<id>/`. Not on this machine yet.
+      `games/CLAUDE.md` (copied 2026-11-07 to `~/code/games-CLAUDE.md`)
+      is only the catalog index. It lists Saalis under "notes only";
+      move it to "Spiritual successors" once there is code.
