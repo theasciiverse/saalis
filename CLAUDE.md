@@ -5,15 +5,21 @@ line of Elite, Wing Commander: Privateer and above all **Ascii Sector**
 (Laserbrain Studios), rebuilt for the terminal in Rust + Ratatui with a
 universe of our own.
 
-**Status (2026-11-07):** 0.4.0 is built, on top of 0.3.0 (factions,
-patrols, traders, hailing, missions) and 0.2.0 (regions, trade, saves).
-- **Shipyard:** four player hulls; guns; armour, shield and power grades;
-  cargo expansion; ECM; missiles with seeker lock; a rear turret; hidden
-  compartments at black markets.
-- **Contraband:** stims and AI cores are banned by faction law.
-  Patrols scan your hold, and customs inspect it on landing.
+**Status (2026-11-07):** 0.5.0 is built, all but the release.
+- Every release so far is in place: flight and combat, regions and
+  trade, factions and missions, the shipyard, and the living belt.
+- **The living belt:** faction fleets fight over who holds each region,
+  off screen, an hour at a time (`sim/war.rs`).
+- **Catalog drafts** are in `asciiverse/saalis.toml` and `.md`. Putting
+  them in `hub`, pushing and tagging are David's call.
+- **Stopped before 0.6.0:** walkable bases need the on-foot art
+  decision, and 0.8.0 needs the quest format. Both are David's open
+  questions below.
 - **Tested:** unit tests and tmux runs. No person has played it yet, so
   prices and balance are untuned.
+- **Known simplification:** a market keeps the law of the region's
+  original owner after the region changes hands. Inspections and
+  patrols follow the new holder.
 
 Design decisions are below, and the release plan is in `ROADMAP.md`.
 

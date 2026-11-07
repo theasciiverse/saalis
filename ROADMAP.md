@@ -38,11 +38,18 @@ Built 2026-11-07.
 - [x] Contraband, hidden compartments, customs scans
 
 ## 0.5.0: a living belt
+
+Built 2026-11-07, all but the release itself.
+
 - [x] Faction fleets and region control
 - [ ] Catalog entry and first public release: drafts in `asciiverse/saalis.toml` and `.md`;
       the hub entry, pushing and tagging are David's call
 
 ## 0.6.0 to 0.8.0
+
+Waiting on David: the on-foot and interior art (half-block floor plans or
+classic ASCII) and the quest format are his open questions.
+
 - [ ] Walkable bases
 - [ ] On-foot combat and boarding disabled ships
 - [ ] Quest format and loader

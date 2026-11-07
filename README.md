@@ -12,7 +12,9 @@ cooperatives' patrols hunt them, freighters run between the bases, and
 the guild boards and the fixers in the bars always have a job with a
 deadline. Shipyards sell bigger hulls, guns, plating, shields, missiles
 and turrets. Stims and unlicensed AI cores pay well where they're
-banned, if the customs scans miss the hidden compartment. Fly and
+banned, if the customs scans miss the hidden compartment. And the
+claim-jumpers' fleets are taking the Reach region by region, unless
+someone stops them. Fly and
 fight in real time from a top-down view. Shields recharge from one energy
 pool and guard four facings. Under them is armour that only a dock can
 patch.
