@@ -3,15 +3,18 @@
 Versions are 0.x.0 while unfinished; 1.0.0 when this list is done.
 
 ## 0.1.0: flight and combat sandbox
-- [ ] Crate set up from Kaiku's loop, input, gamepad, canvas, palette and audio
-- [ ] Session log, too-small message, centred and resize-following layout
-- [ ] Privateer-style flight: turn rate, set/actual speed, afterburner
-- [ ] Guns, one energy pool, four-facing shields over armour
-- [ ] Two or three enemy types with steering AI (experience, morale)
-- [ ] Space view: Braille starfield, ASCII fighters, half-block station and asteroids
-- [ ] HUD: shields/armour, energy, speed, radar, target box, comms line
-- [ ] Explosions and synthesised sound
-- [ ] `--demo` autopilot and the first preview cast
+
+Built 2026-11-07. Still to do: a person plays it and tunes it.
+
+- [x] Crate set up from Kaiku's loop, input, gamepad, canvas, palette and audio
+- [x] Session log, too-small message, centred and resize-following layout
+- [x] Privateer-style flight: turn rate, set/actual speed, afterburner
+- [x] Guns, one energy pool, four-facing shields over armour
+- [x] Two or three enemy types with steering AI (experience, morale)
+- [x] Space view: Braille starfield, ASCII fighters, half-block station and asteroids
+- [x] HUD: shields/armour, energy, speed, radar, target box, comms line
+- [x] Explosions and synthesised sound
+- [x] `--demo` autopilot and the first preview cast
 
 ## 0.2.0: the Reach
 - [ ] Belt regions joined by drive lanes, nav and sector maps, autopilot

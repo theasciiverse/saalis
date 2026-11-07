@@ -5,9 +5,62 @@ line of Elite, Wing Commander: Privateer and above all **Ascii Sector**
 (Laserbrain Studios), rebuilt for the terminal in Rust + Ratatui with a
 universe of our own.
 
-**Status:** design only, no code yet. Direction settled 2026-10-20 (a
-spiritual successor, see below). Universe, art, flight model and first
-scope settled 2026-11-07 (see Decisions). Release plan in `ROADMAP.md`.
+**Status (2026-11-07):** 0.1.0 is built: a flight and combat sandbox
+round Routa station. It plays in `--demo` and responds to keys in a tmux
+smoke test. No person has played it yet, so balance and feel are
+untuned. Design decisions are below, and the release plan is in
+`ROADMAP.md`.
+
+## Running
+
+```bash
+cargo run --release                   # title (the game flies itself behind it)
+cargo run --release -- --play         # straight into the cockpit
+cargo run --release -- --demo --seed 7
+cargo test                            # sim, input, audio, frames at every size
+SAALIS_PRINT=1 cargo test a_frame -- --nocapture   # one 100x30 frame as text
+asciiverse/record-preview.sh          # the 100x30 catalog cast (needs asciinema 3)
+```
+
+Session log: `~/.local/state/saalis/session.log`, started fresh each run.
+It holds every raw key, every state change, the comms, kills and waves,
+and a snapshot every 500 ms. `SAALIS_LOG=info` gives less;
+`SAALIS_LOG_DIR` puts it somewhere else.
+
+Screenshots: run in tmux on a private socket (`tmux -L saalis`), then
+`capture-pane -e -p` and `../panzer/tools/ansi2png.py` (its font lacks
+Braille, so stars and the radar show as boxes there).
+
+## Code layout
+
+- `src/sim/`: the simulation, with no terminal code.
+  - `ship.rs`: hull classes, flight, facings and damage.
+  - `ai.rs`: pilots (lead aim, break, flee); also the demo autopilot.
+  - `mod.rs`: the world (shots, collisions, waves, comms, repair at the
+    dock, the log snapshot).
+  - `v2.rs`: vectors. Heading 0 is up and angles grow clockwise.
+  - `rng.rs`, `cue.rs`.
+- `src/render/`: drawing.
+  - `view.rs`: the camera, with world metres to cells, pixels and dots.
+    The field shows about 1500 m across.
+  - `space.rs`: Braille stars, shots and sparks; half-block rocks, the
+    station and fireballs; the box-drawing dock, brackets and edge arrow.
+  - `glyphs.rs`: ASCII ships, built from parts in the ship's frame, and
+    the box-drawing schematics.
+  - `hud.rs`: gauges, the radar, the target box and comms.
+  - `mod.rs`: the layout and the cards (title, keys, pause, quit, ship
+    lost).
+- Other modules:
+  - `input.rs`: Kaiku's three-tier held keys plus one-shot commands.
+  - `pad.rs`: gilrs.
+  - `audio.rs`: Kaiku's synth with Saalis cues.
+  - `log.rs`: the session log.
+- Ship classes are in code for 0.1 (`sim/ship.rs`). They move to
+  `data/` when the shipyard arrives (0.4).
+- Names are placeholders until the Reach's own names are settled:
+  - hulls: Tiira (the player's), Kärppä, Ahma, Karhu
+  - Routa station
+  - the pirates' callsigns
 
 ## Name
 
