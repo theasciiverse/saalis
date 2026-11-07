@@ -26,4 +26,7 @@ pub enum Cue {
     Contact,
     /// out of energy: the guns click
     Empty,
+    /// a missile away; one locked on to the player
+    Missile,
+    Warning,
 }

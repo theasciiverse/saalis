@@ -69,10 +69,14 @@ mod synth {
             Cue::Comms => (0.03, vec![fade(notes(&[79.0, 79.0, 86.0], Pulse, 0.12, 1), 0.6)]),
             Cue::Contact => (0.08, vec![fade(notes(&[67.0, 61.0, 67.0, 61.0], Square, 0.25, 1), 0.7)]),
             Cue::Empty => (0.01, vec![vec![(40.0, Pulse, 0.15), (40.0, Pulse, 0.0)]]),
+            Cue::Missile => (0.02, vec![slide(40.0, 70.0, 16, Noise, 0.5, 0.1), slide(50.0, 62.0, 12, Saw, 0.2, 0.0)]),
+            Cue::Warning => (0.06, vec![notes(&[88.0, 0.0, 88.0, 0.0], Square, 0.2, 1)]),
         }
     }
 
-    pub const ALL: [Cue; 13] = [
+    pub const ALL: [Cue; 15] = [
+        Cue::Missile,
+        Cue::Warning,
         Cue::Gun,
         Cue::EnemyGun,
         Cue::ShieldHit,

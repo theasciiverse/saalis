@@ -74,7 +74,31 @@ pub enum SparkKind {
     Hull,
     Debris,
     Rock,
+    /// a missile's exhaust
+    Smoke,
 }
+
+/// A missile in flight.
+#[derive(Clone, Debug)]
+pub struct Missile {
+    pub pos: V2,
+    pub vel: V2,
+    pub heading: f32,
+    pub owner: u32,
+    pub faction: Faction,
+    /// what it homes on; none for a dumbfire or a broken lock
+    pub target: Option<u32>,
+    pub age: f32,
+}
+
+pub const MISSILE_SPEED: f32 = 650.0;
+const MISSILE_TURN: f32 = 2.4;
+const MISSILE_LIFE: f32 = 6.0;
+const MISSILE_DAMAGE: f32 = 30.0;
+/// A seeker locks on when the target is within this angle of the nose and
+/// this range.
+pub const LOCK_CONE: f32 = 0.6;
+pub const LOCK_RANGE: f32 = 3000.0;
 
 /// A half-block fireball.
 #[derive(Clone, Copy, Debug)]
@@ -165,6 +189,7 @@ pub struct World {
     pub ships: Vec<Ship>,
     brains: HashMap<u32, Brain>,
     pub shots: Vec<Shot>,
+    pub missiles: Vec<Missile>,
     pub sparks: Vec<Spark>,
     pub blasts: Vec<Blast>,
     pub comms: Vec<Comm>,
@@ -227,6 +252,7 @@ impl World {
             ships: Vec::new(),
             brains: HashMap::new(),
             shots: Vec::new(),
+            missiles: Vec::new(),
             sparks: Vec::new(),
             blasts: Vec::new(),
             comms: Vec::new(),
@@ -274,6 +300,7 @@ impl World {
         self.ships.retain(|s| s.id == PLAYER);
         self.brains.clear();
         self.shots.clear();
+        self.missiles.clear();
         self.sparks.clear();
         self.blasts.clear();
         self.target = None;
@@ -1054,6 +1081,9 @@ impl World {
             }
         }
 
+        self.launches(&intents);
+        self.turrets();
+        self.fly_missiles(dt);
         self.move_shots(dt);
         self.collide();
         self.age_effects(dt);
@@ -1121,6 +1151,122 @@ impl World {
         }
         // driving takes the time flying it would have, at cruise
         self.pass_hours((step / 300.0 / 3600.0 * 60.0) as f64);
+    }
+
+    /// Whether ship `s` has a seeker lock on ship `t`.
+    pub fn locked(&self, s: &Ship, t: &Ship) -> bool {
+        let to = t.pos - s.pos;
+        to.len() < LOCK_RANGE && v2::turn_to(s.heading, to.heading()).abs() < LOCK_CONE
+    }
+
+    /// Missiles away, for every ship that asked and can.
+    fn launches(&mut self, intents: &[Intent]) {
+        let mut away = Vec::new();
+        for (i, it) in intents.iter().enumerate() {
+            let s = &self.ships[i];
+            if !it.missile || !s.alive || !s.kit.launcher || s.launch_cd > 0.0 || s.kit.dumb + s.kit.seekers == 0 {
+                continue;
+            }
+            // the player's target, or for others what their pilot is after
+            let target = if s.id == PLAYER { self.target } else { self.brains.get(&s.id).and_then(|b| b.target) };
+            let lock = target.and_then(|t| self.ship(t)).filter(|t| s.kit.seekers > 0 && self.locked(s, t)).map(|t| t.id);
+            if lock.is_none() && s.kit.dumb == 0 {
+                continue;
+            }
+            away.push((i, lock));
+        }
+        for (i, lock) in away {
+            let s = &mut self.ships[i];
+            if lock.is_some() {
+                s.kit.seekers -= 1;
+            } else {
+                s.kit.dumb -= 1;
+            }
+            s.launch_cd = 1.2;
+            let fwd = s.forward();
+            self.missiles.push(Missile { pos: s.pos + fwd * (s.class.radius + 10.0), vel: s.vel + fwd * 150.0, heading: s.heading, owner: s.id, faction: s.faction, target: lock, age: 0.0 });
+            log::info!("missile from {} lock={:?}", s.callsign, lock);
+            self.cues.push(Cue::Missile);
+            if lock == Some(PLAYER) {
+                self.cues.push(Cue::Warning);
+                self.say_note("Threat warning", "Missile locked on!");
+            }
+        }
+    }
+
+    /// Rear turrets: a laser at the nearest enemy behind, within 900 m.
+    fn turrets(&mut self) {
+        let mut shots = Vec::new();
+        for s in self.ships.iter().filter(|s| s.alive && s.kit.turret && s.turret_cd <= 0.0) {
+            let enemy = self
+                .ships
+                .iter()
+                .filter(|o| {
+                    let to = o.pos - s.pos;
+                    to.len() < 900.0 && v2::turn_to(s.heading, to.heading()).abs() > 1.6 && fights_of(&self.standing, &self.angry, s, o)
+                })
+                .min_by(|a, b| (a.pos - s.pos).len().total_cmp(&(b.pos - s.pos).len()));
+            if let Some(t) = enemy {
+                let aim = ai::lead(s.pos, s.vel, t.pos, t.vel, ship::LASER.speed);
+                let dir = (aim - s.pos).norm();
+                shots.push((s.id, Shot { pos: s.pos + dir * s.class.radius, vel: s.vel + dir * ship::LASER.speed, owner: s.id, side: s.side, faction: s.faction, damage: ship::LASER.damage * 0.8, left: 900.0 }));
+            }
+        }
+        for (id, sh) in shots {
+            if let Some(s) = self.ships.iter_mut().find(|s| s.id == id) {
+                s.turret_cd = 0.4;
+            }
+            self.shots.push(sh);
+        }
+    }
+
+    /// Missiles steer toward their lock, which ECM may break; they burst on
+    /// any ship but their owner's side, or burn out.
+    fn fly_missiles(&mut self, dt: f32) {
+        let mut missiles = std::mem::take(&mut self.missiles);
+        let mut hits = Vec::new();
+        missiles.retain_mut(|m| {
+            m.age += dt;
+            let tracked = m.target.and_then(|t| self.ship(t)).map(|t| (t.pos, t.kit.ecm));
+            if let Some((tpos, ecm)) = tracked {
+                // ECM: a chance a second to break the lock
+                if ecm > 0 && self.rng.chance(0.25 * ecm as f32 * dt) {
+                    log::info!("ECM broke a lock on {:?}", m.target);
+                    m.target = None;
+                } else {
+                    let want = (tpos - m.pos).heading();
+                    m.heading += v2::turn_to(m.heading, want).clamp(-MISSILE_TURN * dt, MISSILE_TURN * dt);
+                }
+            }
+            let speed = m.vel.len().max(MISSILE_SPEED.min(m.vel.len() + 900.0 * dt));
+            m.vel = V2::from_heading(m.heading) * speed.min(MISSILE_SPEED + 300.0);
+            let from = m.pos;
+            m.pos += m.vel * dt;
+            let hit = self.ships.iter().position(|s| s.alive && s.id != m.owner && !(m.owner != PLAYER && s.id != PLAYER && s.faction == m.faction) && seg_hits(from, m.pos, s.pos, s.class.radius + 8.0));
+            if let Some(i) = hit {
+                hits.push((i, m.clone()));
+                return false;
+            }
+            m.age < MISSILE_LIFE
+        });
+        for m in &missiles {
+            if self.rng.chance(0.5) {
+                self.sparks.push(Spark { pos: m.pos - m.vel.norm() * 15.0, vel: m.vel * -0.1, age: 0.0, life: 0.6, kind: SparkKind::Smoke });
+            }
+        }
+        self.missiles = missiles;
+        for (i, m) in hits {
+            self.blasts.push(Blast { pos: m.pos, vel: V2::ZERO, radius: 40.0, age: 0.0, life: 0.4 });
+            let sh = Shot { pos: m.pos, vel: m.vel, owner: m.owner, side: if m.owner == PLAYER { Side::Player } else { Side::Pirate }, faction: m.faction, damage: MISSILE_DAMAGE, left: 0.0 };
+            if self.ships[i].alive {
+                self.hit(i, &sh);
+            }
+        }
+    }
+
+    /// A missile is homing on the player.
+    pub fn missile_warning(&self) -> bool {
+        self.missiles.iter().any(|m| m.target == Some(PLAYER))
     }
 
     fn move_shots(&mut self, dt: f32) {
@@ -1225,7 +1371,7 @@ impl World {
     fn spray(&mut self, pos: V2, vel: V2, n: usize, kind: SparkKind) {
         let speed = match kind {
             SparkKind::Debris => 220.0,
-            SparkKind::Rock => 90.0,
+            SparkKind::Rock | SparkKind::Smoke => 90.0,
             _ => 140.0,
         };
         for _ in 0..n {
@@ -1392,6 +1538,9 @@ impl World {
             let ship_side = if std::ptr::eq(*class, &ship::HAAHKA) { Side::Trader } else { Side::Patrol };
             let mut s = Ship::new(id, class, ship_side, format!("{prefix} {name}"), pos, heading);
             s.faction = faction;
+            s.kit.turret = ship_side == Side::Trader;
+            s.kit.launcher = ship_side == Side::Patrol;
+            s.kit.seekers = if ship_side == Side::Patrol { 2 } else { 0 };
             s.vel = V2::from_heading(heading) * class.max_speed * 0.6;
             let goal = to + (pos - start);
             self.brains.insert(id, Brain::new(0.6, if role == Role::Trader { 1.0 } else { 0.25 }).with_role(role, Some(goal)));
@@ -1435,6 +1584,11 @@ impl World {
             let callsign = format!("{} {}", class.name, callsign(&mut self.rng));
             let mut s = Ship::new(id, class, Side::Pirate, callsign, pos, heading);
             s.vel = V2::from_heading(heading) * class.max_speed;
+            if class.size != Size::Light {
+                s.kit.launcher = true;
+                s.kit.seekers = 2;
+            }
+            s.kit.turret = class.size == Size::Heavy;
             let base = match class.size {
                 Size::Light => 0.3,
                 Size::Medium => 0.45,
@@ -1731,6 +1885,54 @@ mod tests {
         assert_eq!(w.credits, START_CREDITS - Guild::Traders.fee());
         assert!(w.offers.len() > n);
         assert!(w.join(Guild::Traders).is_err());
+    }
+
+    #[test]
+    fn a_seeker_finds_a_locked_target() {
+        let run = |ecm: u8| {
+            let mut w = World::new(3);
+            w.launch();
+            w.encounter_t = f32::INFINITY;
+            w.busy = false;
+            w.spawn_encounter();
+            let id = w.ships[1].id;
+            let me = w.ships[0].pos;
+            {
+                let t = &mut w.ships[1];
+                t.pos = me + v2(0.0, -1500.0);
+                t.vel = V2::ZERO;
+                t.kit.ecm = ecm;
+                t.shields = [0.0; 4];
+            }
+            w.brains.clear();
+            w.ships[0].heading = 0.0;
+            w.ships[0].kit.launcher = true;
+            w.ships[0].kit.seekers = 1;
+            w.target = Some(id);
+            let fire = Intent { missile: true, ..Default::default() };
+            w.update(&fire, 1.0 / 60.0);
+            assert_eq!(w.missiles.len(), 1);
+            assert_eq!(w.missiles[0].target, Some(id), "locked");
+            let before = w.ship(id).map(|t| t.hull + t.armour.iter().sum::<f32>()).unwrap();
+            fly(&mut w, 4.0);
+            w.ship(id).map_or(true, |t| t.hull + t.armour.iter().sum::<f32>() < before)
+        };
+        assert!(run(0), "no ECM: the seeker strikes");
+    }
+
+    #[test]
+    fn a_rear_turret_fires_at_what_follows() {
+        let mut w = World::new(3);
+        w.launch();
+        w.encounter_t = f32::INFINITY;
+        w.spawn_encounter();
+        let behind = w.ships[0].pos + v2(0.0, 500.0);
+        w.ships[1].pos = behind;
+        w.brains.clear();
+        w.ships[0].kit.turret = true;
+        let n = w.shots.len();
+        w.update(&Intent::default(), 1.0 / 60.0);
+        assert!(w.shots.len() > n, "the turret fired");
     }
 
     #[test]

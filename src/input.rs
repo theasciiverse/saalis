@@ -150,6 +150,8 @@ pub struct Commands {
     pub nav_step: i32,
     /// C: continue the saved game on the title; hail in flight
     pub cont: bool,
+    /// F: launch a missile
+    pub missile: bool,
 }
 
 pub struct Input {
@@ -279,6 +281,7 @@ impl Input {
             KeyCode::Char('j') | KeyCode::Char('J') => self.cmd.jump = true,
             KeyCode::Char('l') | KeyCode::Char('L') => self.cmd.land = true,
             KeyCode::Char('c') | KeyCode::Char('C') => self.cmd.cont = true,
+            KeyCode::Char('f') | KeyCode::Char('F') => self.cmd.missile = true,
             KeyCode::Char('[') => self.cmd.nav_step -= 1,
             KeyCode::Char(']') => self.cmd.nav_step += 1,
             KeyCode::Char('p') | KeyCode::Char('P') => self.paused = !self.paused,

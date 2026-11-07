@@ -112,6 +112,16 @@ pub fn bottom(buf: &mut Buffer, area: Rect, w: &World, note: Option<&str>) {
             left.push(Span::styled(if ready { "●" } else { "○" }, Style::default().fg(if ready { rgb(pal::ENERGY) } else { pal::DIM })));
         }
     }
+    if let Some(p) = w.ships.first().filter(|p| p.kit.launcher) {
+        let lock = w.target.and_then(|t| w.ship(t)).is_some_and(|t| p.kit.seekers > 0 && w.locked(p, t));
+        left.push(Span::styled(format!(" MSL {}+{}", p.kit.seekers, p.kit.dumb), Style::default().fg(pal::DIM)));
+        if lock {
+            left.push(Span::styled(" LOCK", Style::default().fg(pal::TARGET).add_modifier(Modifier::BOLD)));
+        }
+    }
+    if w.missile_warning() && (w.time * 4.0) as i32 % 2 == 0 {
+        left.push(Span::styled(" MISSILE ", Style::default().fg(Color::Rgb(20, 10, 10)).bg(Color::Rgb(255, 80, 70))));
+    }
     left.push(Span::raw("  "));
     let max = w.ships.first().map_or(0, |p| p.cargo_cap());
     let tally = format!("{} cr  HOLD {}/{}  KILLS {}", w.credits, w.cargo_used(), max, w.kills);

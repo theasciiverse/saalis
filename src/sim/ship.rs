@@ -344,6 +344,8 @@ pub struct Intent {
     pub set_speed: Option<f32>,
     pub burner: bool,
     pub fire: bool,
+    /// launch a missile (seeking if locked on and carried, else dumbfire)
+    pub missile: bool,
 }
 
 /// What a hit did, for the sound and the comms.
@@ -435,6 +437,9 @@ pub struct Ship {
     pub next_gun: usize,
     /// seconds since the last hit, per facing, for the flash on screen
     pub hit_flash: [f32; 4],
+    /// seconds until the rear turret or the launcher can fire again
+    pub turret_cd: f32,
+    pub launch_cd: f32,
     pub alive: bool,
 }
 
@@ -460,6 +465,8 @@ impl Ship {
             cooldown: vec![0.0; class.guns.len()],
             next_gun: 0,
             hit_flash: [9.0; 4],
+            turret_cd: 0.0,
+            launch_cd: 0.0,
             alive: true,
         }
     }
@@ -554,6 +561,8 @@ impl Ship {
         for cd in &mut self.cooldown {
             *cd = (*cd - dt).max(0.0);
         }
+        self.turret_cd = (self.turret_cd - dt).max(0.0);
+        self.launch_cd = (self.launch_cd - dt).max(0.0);
         self.burning && !was
     }
 

@@ -183,7 +183,7 @@ fn lost(buf: &mut Buffer, field: Rect, w: &crate::sim::World, demo: bool, saved:
     card(buf, field, "", &lines);
 }
 
-const KEYS: [(&str, &str); 21] = [
+const KEYS: [(&str, &str); 22] = [
     ("← →  A D", "turn"),
     ("↑ ↓  W S", "throttle up, down"),
     ("Home", "full speed"),
@@ -191,6 +191,7 @@ const KEYS: [(&str, &str); 21] = [
     ("M", "match the target's speed"),
     ("Space", "fire guns (hold)"),
     ("Tab", "afterburner (hold)"),
+    ("F", "missile (seeks when LOCK shows)"),
     ("T", "next target"),
     ("R", "nearest target"),
     ("N", "nav map (Tab in it: the Reach)"),

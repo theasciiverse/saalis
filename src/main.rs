@@ -266,7 +266,7 @@ fn run(terminal: &mut DefaultTerminal, kitty: bool, args: &Args, mut audio: audi
                         w.autopilot = false;
                         ::log::info!("autopilot off: the pilot took over");
                     }
-                    let mut it = Intent { turn: c.turn, throttle: c.throttle, fire: c.fire, burner: c.burner, set_speed: None };
+                    let mut it = Intent { turn: c.turn, throttle: c.throttle, fire: c.fire, burner: c.burner, set_speed: None, missile: cmd.missile };
                     if let Some(p) = w.player() {
                         let max = p.class.max_speed;
                         if cmd.full {

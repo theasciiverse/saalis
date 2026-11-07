@@ -54,6 +54,15 @@ pub fn draw(buf: &mut Buffer, view: &View, w: &World) {
             c.dot(x, y, rgb(scale(col, 0.45 + 0.275 * k as f32)));
         }
     }
+    for m in &w.missiles {
+        // a bright head and a hot tail; the smoke is sparks
+        let dir = m.vel.norm();
+        for k in 0..3 {
+            let (x, y) = view.dot(m.pos - dir * (k as f32 * 9.0));
+            let col = [(255, 255, 220), (255, 190, 90), (200, 90, 40)][k];
+            c.dot(x, y, rgb(col));
+        }
+    }
     for s in &w.sparks {
         let t = s.age / s.life;
         let base: Rgb = match s.kind {
@@ -62,6 +71,7 @@ pub fn draw(buf: &mut Buffer, view: &View, w: &World) {
             SparkKind::Hull => (255, 240, 220),
             SparkKind::Debris => pal::lerp((255, 220, 140), (180, 60, 30), t),
             SparkKind::Rock => (170, 150, 130),
+            SparkKind::Smoke => (120, 120, 130),
         };
         let (x, y) = view.dot(s.pos);
         c.dot(x, y, rgb(scale(base, 1.0 - t * 0.6)));
