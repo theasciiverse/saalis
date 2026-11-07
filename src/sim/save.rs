@@ -10,7 +10,7 @@ use super::{Phase, World, PLAYER};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-const FORMAT: u32 = 2;
+const FORMAT: u32 = 3;
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct Save {
@@ -28,6 +28,11 @@ pub struct Save {
     pub encounters: u32,
     pub markets: Vec<Market>,
     pub standing: super::faction::Standing,
+    pub missions: Vec<super::mission::Mission>,
+    pub mission_cargo: u32,
+    pub members: [bool; 2],
+    pub rating: [u32; 2],
+    pub next_mission: u32,
 }
 
 /// Where saves live: `SAALIS_DATA_DIR`, or the platform's data folder.
@@ -69,6 +74,11 @@ impl World {
             encounters: self.encounters,
             markets: self.markets.clone(),
             standing: self.standing.clone(),
+            missions: self.missions.clone(),
+            mission_cargo: self.mission_cargo,
+            members: self.members,
+            rating: self.rating,
+            next_mission: self.next_mission,
         })
     }
 
@@ -91,6 +101,11 @@ impl World {
         w.kills = s.kills;
         w.encounters = s.encounters;
         w.standing = s.standing;
+        w.missions = s.missions;
+        w.mission_cargo = s.mission_cargo;
+        w.members = s.members;
+        w.rating = s.rating;
+        w.next_mission = s.next_mission;
         let mut p = Ship::new(PLAYER, &ship::TIIRA, Side::Player, "you", w.bases[s.base].pos, 0.0);
         p.armour = s.armour;
         p.hull = s.hull.max(1.0);
@@ -98,6 +113,7 @@ impl World {
         p.set_speed = 0.0;
         w.ships = vec![p];
         w.phase = Phase::Docked(s.base);
+        w.refresh_board();
         Some(w)
     }
 }

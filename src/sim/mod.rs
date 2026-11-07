@@ -7,6 +7,7 @@ pub mod ai;
 pub mod cue;
 pub mod econ;
 pub mod faction;
+pub mod mission;
 pub mod rng;
 pub mod save;
 pub mod sector;
@@ -17,6 +18,7 @@ use ai::{Brain, Obstacle, Role};
 use cue::Cue;
 use econ::Market;
 use faction::{Faction, Standing};
+use mission::{Guild, Issuer, Mission, Task};
 use rng::Rng;
 use sector::{BaseKind, Sector};
 use ship::{Class, Intent, Ship, Side, Size, Struck};
@@ -144,6 +146,18 @@ pub struct World {
     pub standing: Standing,
     /// ships the player has fired on, which now fight back
     pub angry: HashSet<u32>,
+    /// jobs taken
+    pub missions: Vec<Mission>,
+    /// units in the hold that belong to cargo jobs
+    pub mission_cargo: u32,
+    /// guild membership and rating, by `Guild::index`
+    pub members: [bool; 2],
+    pub rating: [u32; 2],
+    /// what the boards offer at the base the player is docked at
+    pub offers: Vec<Mission>,
+    /// the fixer in this base's bar, if any: name, line, job
+    pub fixer: Option<(String, String, Mission)>,
+    pub next_mission: u32,
     /// what the player paid per unit, on average, for what is in the hold
     pub paid: [u32; econ::N],
     pub ships: Vec<Ship>,
@@ -200,6 +214,13 @@ impl World {
             cargo: [0; econ::N],
             standing: Standing::default(),
             angry: HashSet::new(),
+            missions: Vec::new(),
+            mission_cargo: 0,
+            members: [false; 2],
+            rating: [0; 2],
+            offers: Vec::new(),
+            fixer: None,
+            next_mission: 0,
             paid: [0; econ::N],
             ships: Vec::new(),
             brains: HashMap::new(),
@@ -225,6 +246,7 @@ impl World {
         s.vel = V2::ZERO;
         s.set_speed = 0.0;
         w.ships.push(s);
+        w.refresh_board();
         w
     }
 
@@ -309,7 +331,7 @@ impl World {
     }
 
     pub fn cargo_used(&self) -> u32 {
-        self.cargo.iter().sum()
+        self.cargo.iter().sum::<u32>() + self.mission_cargo
     }
 
     pub fn cargo_room(&self) -> u32 {
@@ -332,6 +354,141 @@ impl World {
                 m.drift(whole as f32);
             }
         }
+    }
+
+    // --- missions ------------------------------------------------------
+
+    /// The boards and the bar at the base the player is docked at.
+    pub fn refresh_board(&mut self) {
+        let Phase::Docked(b) = self.phase else { return };
+        let bd = mission::board(self.seed, &self.sector, self.region, b, self.clock, self.members, self.rating, &mut self.next_mission);
+        // jobs already taken stay off the board
+        let taken: Vec<Task> = self.missions.iter().map(|m| m.task.clone()).collect();
+        self.offers = bd.offers.into_iter().filter(|m| !taken.contains(&m.task)).collect();
+        self.fixer = bd.fixer.filter(|f| !taken.contains(&f.2.task));
+    }
+
+    /// Takes a job; says why not if it can't.
+    fn take(&mut self, m: Mission) -> Result<String, String> {
+        if self.missions.len() >= mission::MAX_ACTIVE {
+            return Err(format!("You can carry {} jobs at most.", mission::MAX_ACTIVE));
+        }
+        if m.units() > self.cargo_room() {
+            return Err(format!("It needs {} units of hold space.", m.units()));
+        }
+        self.mission_cargo += m.units();
+        let line = format!("Taken: {}.", m.describe(&self.sector));
+        log::info!("mission taken {:?}", m);
+        // point the way
+        if m.region() != self.region && self.course.is_empty() {
+            self.plot(m.region());
+        }
+        self.missions.push(m);
+        Ok(line)
+    }
+
+    /// A: takes board offer `i`.
+    pub fn accept_offer(&mut self, i: usize) -> Result<String, String> {
+        let Some(m) = self.offers.get(i).cloned() else { return Err("Nothing there.".into()) };
+        let line = self.take(m)?;
+        self.offers.remove(i);
+        Ok(line)
+    }
+
+    /// Takes the fixer's job.
+    pub fn accept_fixer(&mut self) -> Result<String, String> {
+        let Some((_, _, m)) = self.fixer.clone() else { return Err("Nobody's buying today.".into()) };
+        let line = self.take(m)?;
+        self.fixer = None;
+        Ok(line)
+    }
+
+    /// Joins a guild: the fee, and the faction must not dislike you.
+    pub fn join(&mut self, g: Guild) -> Result<String, String> {
+        if self.members[g.index()] {
+            return Err(format!("You're already in the {}.", g.name()));
+        }
+        if self.standing.of(g.faction()) < 0 {
+            return Err(format!("The {} won't have you.", g.name()));
+        }
+        if self.credits < g.fee() {
+            return Err(format!("Membership is {} cr.", g.fee()));
+        }
+        self.credits -= g.fee();
+        self.members[g.index()] = true;
+        self.refresh_board();
+        log::info!("joined {}", g.name());
+        Ok(format!("Welcome to the {}. The whole board is yours.", g.name()))
+    }
+
+    fn complete(&mut self, id: u32) {
+        let Some(i) = self.missions.iter().position(|m| m.id == id) else { return };
+        let m = self.missions.remove(i);
+        self.mission_cargo = self.mission_cargo.saturating_sub(m.units());
+        self.credits += m.pay;
+        if let Issuer::Guild(g) = m.issuer {
+            self.rating[g.index()] += 1;
+            self.standing.shift(g.faction(), 4);
+        }
+        log::info!("mission done {:?} pay {}", m.task, m.pay);
+        let from = m.issuer_name();
+        self.say(from, format!("Job done: {}. {} cr paid.", m.describe(&self.sector), m.pay), None);
+        self.cues.push(Cue::Target);
+    }
+
+    fn fail(&mut self, id: u32, why: &str) {
+        let Some(i) = self.missions.iter().position(|m| m.id == id) else { return };
+        let m = self.missions.remove(i);
+        self.mission_cargo = self.mission_cargo.saturating_sub(m.units());
+        if let Issuer::Guild(g) = m.issuer {
+            self.rating[g.index()] = self.rating[g.index()].saturating_sub(1);
+            self.standing.shift(g.faction(), -6);
+        }
+        log::info!("mission failed {:?}: {why}", m.task);
+        let from = m.issuer_name();
+        self.say(from, format!("{why} {}: the job is off.", m.describe(&self.sector)), None);
+    }
+
+    /// Deadlines, patrol points and finished bounties.
+    fn check_missions(&mut self) {
+        let late: Vec<u32> = self.missions.iter().filter(|m| self.clock > m.deadline).map(|m| m.id).collect();
+        for id in late {
+            self.fail(id, "Too late.");
+        }
+        if let Some(p) = self.player().map(|p| p.pos) {
+            let region = self.region;
+            let mouths: Vec<(usize, V2)> = self.sector.neighbours(region).into_iter().map(|to| (to, self.sector.mouth(region, to))).collect();
+            for m in &mut self.missions {
+                if let Task::Patrol { region: r, mouths: list, seen } = &mut m.task {
+                    if *r == region {
+                        for (k, to) in list.iter().enumerate() {
+                            if !seen[k] && mouths.iter().any(|&(t, at)| t == *to && (at - p).len() < MOUTH_RADIUS) {
+                                seen[k] = true;
+                                log::info!("patrol point {k} seen");
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        let done: Vec<u32> = self
+            .missions
+            .iter()
+            .filter(|m| match &m.task {
+                Task::Patrol { seen, .. } => seen.iter().all(|x| *x),
+                Task::Bounty { need, done, .. } => done >= need,
+                _ => false,
+            })
+            .map(|m| m.id)
+            .collect();
+        for id in done {
+            self.complete(id);
+        }
+    }
+
+    /// A bounty job is open in the current region.
+    fn hunting_here(&self) -> bool {
+        self.missions.iter().any(|m| matches!(m.task, Task::Bounty { region, .. } if region == self.region))
     }
 
     // --- comms ---------------------------------------------------------
@@ -461,9 +618,10 @@ impl World {
         let def = &self.sector.regions[to];
         let (note, threat) = (format!("{}: {}.", def.name, def.note), def.threat);
         self.say("Lane beacon", note, None);
-        if threat > 0 && self.rng.chance(0.2 * threat as f32) {
+        if (threat > 0 && self.rng.chance(0.2 * threat as f32)) || self.hunting_here() {
             self.encounter_t = self.rng.range(3.0, 8.0);
         }
+        self.check_missions();
     }
 
     /// L: land at the nearest base, if close and slow enough.
@@ -513,6 +671,19 @@ impl World {
         }
         self.pass_hours(0.5);
         log::info!("docked at {}", self.bases[b].name);
+        self.check_missions();
+        // deliveries
+        let here = (self.region, b);
+        let done: Vec<u32> = self
+            .missions
+            .iter()
+            .filter(|m| matches!(m.task, Task::Cargo { region, base, .. } | Task::Courier { region, base } if (region, base) == here))
+            .map(|m| m.id)
+            .collect();
+        for id in done {
+            self.complete(id);
+        }
+        self.refresh_board();
     }
 
     /// Leaves the dock, out along the docking arm.
@@ -885,6 +1056,9 @@ impl World {
         self.age_effects(dt);
         self.tidy();
         self.encounter(dt);
+        if (self.time * 2.0).floor() != ((self.time - dt) * 2.0).floor() {
+            self.check_missions();
+        }
         if self.target.is_some_and(|t| self.ship(t).is_none()) {
             self.target = None;
         }
@@ -1028,6 +1202,14 @@ impl World {
             self.credits += s.class.bounty;
             self.standing.shift(Faction::Pirates, -3);
             self.standing.shift(Faction::Traders, 1);
+            let region = self.region;
+            for m in &mut self.missions {
+                if let Task::Bounty { region: r, done, .. } = &mut m.task {
+                    if *r == region {
+                        *done += 1;
+                    }
+                }
+            }
             let owner = self.owner();
             if owner != Faction::Pirates {
                 self.standing.shift(owner, 2);
@@ -1163,7 +1345,7 @@ impl World {
         let patrol = if owner == Faction::Pirates { 0.0 } else { 1.2 };
         let trade = if self.bases.is_empty() { 0.4 } else { 1.4 };
         let roll = self.rng.range(0.0, threat + patrol + trade);
-        if roll < threat {
+        if roll < threat || self.hunting_here() {
             self.spawn_encounter();
         } else if roll < threat + patrol {
             self.spawn_traveller(Side::Patrol, owner);
@@ -1485,6 +1667,67 @@ mod tests {
         w.hail(id, 1);
         assert!(w.credits < credits);
         assert!(w.fleeing(id));
+    }
+
+    #[test]
+    fn a_courier_job_pays_on_landing_and_a_late_one_fails() {
+        let mut w = World::new(8);
+        w.members = [true; 2];
+        w.refresh_board();
+        let i = w.offers.iter().position(|m| matches!(m.task, Task::Courier { .. } | Task::Cargo { .. })).expect("a traders' job");
+        let m = w.offers[i].clone();
+        let units = m.units();
+        w.accept_offer(i).expect("taken");
+        assert_eq!(w.cargo_used(), units);
+        // fly there by teleport
+        let (Task::Courier { region, base } | Task::Cargo { region, base, .. }) = m.task else { unreachable!() };
+        w.launch();
+        w.enter_region(region);
+        w.ships[0].pos = w.bases[base].pos;
+        let credits = w.credits;
+        w.dock(base);
+        assert!(w.missions.is_empty(), "delivered");
+        assert_eq!(w.credits, credits + m.pay);
+        assert_eq!(w.cargo_used(), 0);
+        assert_eq!(w.rating[0], 1);
+
+        // and one left too long
+        let mut w = World::new(8);
+        w.members = [true; 2];
+        w.refresh_board();
+        w.accept_offer(0).expect("taken");
+        let before = w.standing.of(Faction::Traders);
+        w.clock += 24.0 * 30.0;
+        w.check_missions();
+        assert!(w.missions.is_empty());
+        assert!(w.standing.of(w.offers.first().map_or(Faction::Traders, |_| Faction::Traders)) <= before);
+    }
+
+    #[test]
+    fn a_bounty_counts_kills_in_its_region() {
+        let mut w = World::demo(8);
+        w.missions.push(Mission { id: 99, issuer: Issuer::Guild(Guild::Watch), task: Task::Bounty { region: 0, need: 1, done: 0 }, pay: 500, deadline: 1e9 });
+        fly(&mut w, 5.0);
+        let i = w.ships.iter().position(|s| s.side == Side::Pirate).expect("a pirate");
+        let credits = w.credits;
+        w.ships[i].hull = 0.1;
+        w.ships[i].shields = [0.0; 4];
+        w.ships[i].armour = [0.0; 4];
+        let sh = Shot { pos: w.ships[i].pos, vel: v2(0.0, 100.0), owner: PLAYER, side: Side::Player, faction: Faction::Coop, damage: 50.0, left: 100.0 };
+        w.hit(i, &sh);
+        w.check_missions();
+        assert!(w.missions.is_empty());
+        assert!(w.credits >= credits + 500);
+    }
+
+    #[test]
+    fn joining_a_guild_costs_and_opens_the_board() {
+        let mut w = World::new(8);
+        let n = w.offers.len();
+        w.join(Guild::Traders).expect("joined");
+        assert_eq!(w.credits, START_CREDITS - Guild::Traders.fee());
+        assert!(w.offers.len() > n);
+        assert!(w.join(Guild::Traders).is_err());
     }
 
     #[test]

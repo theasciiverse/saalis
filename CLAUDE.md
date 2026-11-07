@@ -5,15 +5,20 @@ line of Elite, Wing Commander: Privateer and above all **Ascii Sector**
 (Laserbrain Studios), rebuilt for the terminal in Rust + Ratatui with a
 universe of our own.
 
-**Status (2026-11-07):** 0.2.0 is built.
-- Nine belt regions joined by lanes, with seven bases and their markets.
-- The nav map, plotted courses, the autopilot (it drops out when
-  claim-jumpers turn up on the way), jumps, landing, the exchange,
-  repairs, and saving at the dock.
-- Tested by unit tests and by a scripted tmux run: buy, launch,
-  autopilot, jump, autopilot, land, autosave, continue.
-- No person has played it yet, so prices, encounter rates and balance
-  are untuned.
+**Status (2026-11-07):** 0.3.0 is built, on top of 0.2.0 (regions,
+lanes, trade, saves).
+- **Factions:** five, with your standing toward each (-125 to 125).
+  Every region has an owner.
+- **Traffic:** the owner's patrols and freighters pass through. Pirates
+  fight everyone, and shooting a patrol turns it and its faction against
+  you.
+- **Hailing (C):** bribe pirates or talk them down; ask patrols for news
+  or an escort; ask traders for price tips.
+- **Missions:** two guild boards (membership fees, ratings, cargo,
+  courier, bounty and patrol jobs) and fixers in the bars, all with
+  deadlines.
+- **Tested:** unit tests and tmux runs. No person has played it yet, so
+  balance is untuned.
 
 Design decisions are below, and the release plan is in `ROADMAP.md`.
 
@@ -51,7 +56,10 @@ Braille, so stars and the radar show as boxes there).
   - `sector.rs`: the Reach's regions, lanes, bases and rocks.
   - `econ.rs`: goods and markets. Prices follow stock, and stock drifts
     back by the hour.
-  - `save.rs`: the one save slot, as versioned JSON.
+  - `save.rs`: the one save slot, as versioned JSON (format 3).
+  - `faction.rs`: factions and standing.
+  - `mission.rs`: guilds, jobs and the boards. A board is seeded by the
+    base and the day.
   - `v2.rs`: vectors. Heading 0 is up and angles grow clockwise.
   - `rng.rs`, `cue.rs`.
 - `src/render/`: drawing.
@@ -80,6 +88,11 @@ Braille, so stars and the radar show as boxes there).
   - the regions and bases in `sector.rs` (Pallas is real and keeps its
     name)
   - the pirates' callsigns
+  - factions: Reach Cooperative, Crown Combine, Free Traders, Inner
+    Customs (the inner planets), and claim-jumpers
+  - guilds: the Free Traders' Guild and the Reach Watch
+  - fixers' names and lines (`mission.rs`), the comms lines (`mod.rs`)
+  - hulls Kotka (patrol fighter, `A`) and Haahka (freighter, `O`)
 
 ## Name
 

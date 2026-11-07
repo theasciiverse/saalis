@@ -203,7 +203,7 @@ const KEYS: [(&str, &str); 21] = [
     ("F8", "sound on, off"),
     ("F1", "these keys"),
     ("Esc", "quit"),
-    ("dock", "↑↓ goods · B buy · S sell · R repair · Enter launch"),
+    ("dock", "Tab: exchange, missions, bar · R repair · Enter launch"),
     ("pad", "stick flies · A fires · B burns · RB target"),
 ];
 
@@ -222,7 +222,7 @@ mod tests {
     use crate::sim::World;
 
     fn app(w: World, screen: Screen) -> App {
-        App { world: w, screen, map_sector: false, map_sel: 0, dock_row: 0, dock_note: None, saved: None, demo: false, ask_quit: false, hailing: None }
+        App { world: w, screen, map_sector: false, map_sel: 0, dock_row: 0, dock_tab: 0, job_row: 0, dock_note: None, saved: None, demo: false, ask_quit: false, hailing: None }
     }
 
     fn ui(a: &App) -> Ui<'_> {
@@ -269,9 +269,12 @@ mod tests {
                 }
             }
         }
-        let docked = app(World::new(5), Screen::Dock);
-        for (cw, ch) in [(20, 6), (80, 24), (100, 30), (300, 90)] {
-            frame_of(&docked, cw, ch);
+        let mut docked = app(World::new(5), Screen::Dock);
+        for tab in 0..3 {
+            docked.dock_tab = tab;
+            for (cw, ch) in [(20, 6), (80, 24), (100, 30), (300, 90)] {
+                frame_of(&docked, cw, ch);
+            }
         }
     }
 

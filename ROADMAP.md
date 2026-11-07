@@ -24,8 +24,11 @@ Built 2026-11-07.
 - [x] Landing, base menus, commodity exchange, saving
 
 ## 0.3.0: people
+
+Built 2026-11-07.
+
 - [x] Factions and attitude, comms, encounters by region owner
-- [ ] Generated missions with deadlines, guilds, fixers
+- [x] Generated missions with deadlines, guilds, fixers
 
 ## 0.4.0: the shipyard
 - [ ] Hulls and upgrades, missiles and ECM, turrets, repair

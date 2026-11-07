@@ -7,7 +7,10 @@ the asteroid belt. You fly a light courier-fighter out of Routa Station,
 with 2,000 credits and an empty hold. Nine belt regions are joined by
 drive lanes. Mines sell ice and ore, refineries want them, farms grow the
 Reach's food and air, and every market moves with what you buy and sell.
-Claim-jumpers work the lanes, worst where no station watches. Fly and
+Claim-jumpers work the lanes, worst where no station watches. The
+cooperatives' patrols hunt them, freighters run between the bases, and
+the guild boards and the fixers in the bars always have a job with a
+deadline. Fly and
 fight in real time from a top-down view. Shields recharge from one energy
 pool and guard four facings. Under them is armour that only a dock can
 patch.
@@ -44,13 +47,16 @@ comfortable.
 | G | autopilot to the nav point |
 | J | jump through a lane mouth |
 | L | land at a base (close and slow) |
+| C | hail the target, or the nearest ship |
 | P | pause |
 | F8 | sound on or off |
 | F1 | keys |
 | Esc | quit |
 
-Docked: ↑ ↓ choose a good, B or → buys, S or ← sells (Shift for ten),
-R repairs, F saves, Enter launches. Every landing saves the game; C on
+Docked: Tab switches between the exchange, the mission boards and the
+bar. At the exchange ↑ ↓ choose a good, B or → buys, S or ← sells (Shift
+for ten). On the boards and in the bar A takes a job, and 1 or 2 joins a
+guild. R repairs, F saves, Enter launches. Every landing saves the game; C on
 the title continues it.
 
 Gamepad: the left stick turns and throttles, A fires, B burns, the right

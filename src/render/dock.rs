@@ -58,9 +58,22 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &App) {
 
     Paragraph::new(lines).render(inner, buf);
 
-    let block = frame("exchange");
+    let tabs = ["exchange", "missions", "bar"];
+    let mut title = vec![Span::raw(" ")];
+    for (i, t) in tabs.iter().enumerate() {
+        let st = if i == app.dock_tab { Style::default().fg(pal::TEXT).add_modifier(Modifier::REVERSED) } else { Style::default().fg(pal::DIM) };
+        title.push(Span::styled(format!(" {t} "), st));
+        title.push(Span::raw(" "));
+    }
+    title.push(Span::styled("Tab switches ", Style::default().fg(pal::TRACE)));
+    let block = frame("").title(Line::from(title));
     let inner = block.inner(main);
     block.render(main, buf);
+    match app.dock_tab {
+        1 => return board(buf, inner, app),
+        2 => return bar(buf, inner, app),
+        _ => {}
+    }
     let m = &w.markets[base.market];
     let hdr = Style::default().fg(pal::DIM);
     let mut rows = vec![
@@ -92,9 +105,80 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &App) {
     rows.push(Line::from(""));
     rows.push(Line::from(Span::styled("↑↓ choose · → or B buy · ← or S sell · Shift: ten at a time", hdr)));
     rows.push(Line::from(Span::styled("R repair · F save · Enter launch · Esc quit", hdr)));
-    if let Some(note) = &app.dock_note {
-        rows.push(Line::from(""));
-        rows.push(Line::from(Span::styled(note.clone(), Style::default().fg(pal::TARGET))));
-    }
+    note(&mut rows, app);
     Paragraph::new(rows).render(inner, buf);
+}
+
+fn note(rows: &mut Vec<Line<'static>>, app: &App) {
+    if let Some(n) = &app.dock_note {
+        rows.push(Line::from(""));
+        rows.push(Line::from(Span::styled(n.clone(), Style::default().fg(pal::TARGET))));
+    }
+}
+
+fn board(buf: &mut Buffer, area: Rect, app: &App) {
+    use crate::sim::mission::{time_left, Guild, Issuer};
+    let w = &app.world;
+    let dim = Style::default().fg(pal::DIM);
+    let text = Style::default().fg(pal::TEXT);
+    let width = area.width as usize;
+    let mut rows = vec![Line::from(Span::styled("ON THE BOARDS", dim))];
+    if w.offers.is_empty() {
+        rows.push(Line::from(Span::styled("nothing today", dim)));
+    }
+    for (i, m) in w.offers.iter().enumerate() {
+        let who = match &m.issuer {
+            Issuer::Guild(Guild::Traders) => "Traders",
+            Issuer::Guild(Guild::Watch) => "Watch",
+            Issuer::Fixer(_) => "fixer",
+        };
+        let tail = format!("{:>6} cr {:>8}", m.pay, time_left(m.deadline, w.clock));
+        let room = width.saturating_sub(tail.len() + 10);
+        let mut d = m.describe(&w.sector);
+        if d.chars().count() > room {
+            d = d.chars().take(room.saturating_sub(1)).collect::<String>() + "…";
+        }
+        let st = if i == app.job_row { text.add_modifier(Modifier::REVERSED) } else { text };
+        rows.push(Line::from(vec![Span::styled(format!("{who:<8} "), dim), Span::styled(format!("{d:<room$}"), st), Span::styled(format!(" {tail}"), text)]));
+    }
+    rows.push(Line::from(""));
+    rows.push(Line::from(Span::styled(format!("YOUR JOBS ({}/{})", w.missions.len(), crate::sim::mission::MAX_ACTIVE), dim)));
+    if w.missions.is_empty() {
+        rows.push(Line::from(Span::styled("none", dim)));
+    }
+    for m in &w.missions {
+        let tail = format!("{:>6} cr {:>8}", m.pay, time_left(m.deadline, w.clock));
+        let room = width.saturating_sub(tail.len() + 1);
+        let d: String = m.describe(&w.sector).chars().take(room).collect();
+        rows.push(Line::from(vec![Span::styled(format!("{d:<room$}"), text), Span::styled(format!(" {tail}"), text)]));
+    }
+    rows.push(Line::from(""));
+    for (k, g) in Guild::ALL.iter().enumerate() {
+        let status = if w.members[g.index()] { format!("member, rating {}", w.rating[g.index()]) } else { format!("{} to join: press {}", g.fee(), k + 1) };
+        rows.push(Line::from(vec![Span::styled(format!("{:<22}", g.name()), Style::default().fg(pal::rgb(pal::faction(g.faction())))), Span::styled(status, dim)]));
+    }
+    rows.push(Line::from(Span::styled("↑↓ choose · A take the job · Enter launch", dim)));
+    note(&mut rows, app);
+    Paragraph::new(rows).render(area, buf);
+}
+
+fn bar(buf: &mut Buffer, area: Rect, app: &App) {
+    use crate::sim::mission::time_left;
+    let w = &app.world;
+    let dim = Style::default().fg(pal::DIM);
+    let mut rows = vec![Line::from(Span::styled("THE BAR", dim)), Line::from("")];
+    match &w.fixer {
+        Some((name, line, m)) => {
+            rows.push(Line::from(Span::styled(name.clone(), Style::default().fg(pal::TARGET).add_modifier(Modifier::BOLD))));
+            rows.push(Line::from(Span::styled(format!("\u{201c}{line}\u{201d}"), Style::default().fg(pal::TEXT))));
+            rows.push(Line::from(""));
+            rows.push(Line::from(Span::styled(format!("The job: {}.", m.describe(&w.sector)), Style::default().fg(pal::TEXT))));
+            rows.push(Line::from(Span::styled(format!("{} cr, done within {}.", m.pay, time_left(m.deadline, w.clock)), Style::default().fg(pal::TEXT))));
+            rows.push(Line::from(""));
+            rows.push(Line::from(Span::styled("A take it · Tab back to the boards", dim)));
+        }
+        None => rows.push(Line::from(Span::styled("Quiet tonight. Nobody's buying.", dim))),
+    }
+    note(&mut rows, app);
+    Paragraph::new(rows).render(area, buf);
 }

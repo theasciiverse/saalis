@@ -120,6 +120,15 @@ fn region(buf: &mut Buffer, map: Rect, list: Rect, app: &App, aspect: f32) {
         lines.push(Line::from(""));
         lines.push(Line::from(Span::styled(format!("course: {dest}, {} lanes", w.course.len()), Style::default().fg(rgb(pal::LANE)))));
     }
+    if !w.missions.is_empty() {
+        lines.push(Line::from(""));
+        lines.push(Line::from(Span::styled("JOBS", Style::default().fg(pal::DIM))));
+        for m in &w.missions {
+            let d: String = m.describe(&w.sector).chars().take(LIST_W as usize - 8).collect();
+            let left = crate::sim::mission::time_left(m.deadline, w.clock);
+            lines.push(Line::from(vec![Span::styled(d, Style::default().fg(pal::TEXT)), Span::styled(format!(" {left}"), Style::default().fg(pal::DIM))]));
+        }
+    }
     Paragraph::new(lines).render(list, buf);
 }
 

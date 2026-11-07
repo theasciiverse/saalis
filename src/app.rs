@@ -25,6 +25,10 @@ pub struct App {
     pub map_sel: usize,
     /// the highlighted good at the exchange
     pub dock_row: usize,
+    /// the dock's tab: 0 exchange, 1 missions, 2 bar
+    pub dock_tab: usize,
+    /// the highlighted offer on the mission board
+    pub job_row: usize,
     /// a line of news at the dock: what was bought, saved, repaired
     pub dock_note: Option<String>,
     /// what the title offers to continue, if there is a save
@@ -39,7 +43,7 @@ pub struct App {
 impl App {
     pub fn new(world: World, screen: Screen, demo: bool) -> App {
         let saved = save::read().map(|s| save::describe(&s));
-        App { world, screen, map_sector: false, map_sel: 0, dock_row: 0, dock_note: None, saved, demo, ask_quit: false, hailing: None }
+        App { world, screen, map_sector: false, map_sel: 0, dock_row: 0, dock_tab: 0, job_row: 0, dock_note: None, saved, demo, ask_quit: false, hailing: None }
     }
 
     /// Whether keys go to a menu rather than to flight.
@@ -130,6 +134,38 @@ impl App {
         }
     }
 
+    fn board_key(&mut self, k: KeyEvent) {
+        let n = self.world.offers.len();
+        let note = match k.code {
+            KeyCode::Up | KeyCode::Char('w') | KeyCode::Char('k') if n > 0 => {
+                self.job_row = (self.job_row + n - 1) % n;
+                None
+            }
+            KeyCode::Down | KeyCode::Char('s') | KeyCode::Char('j') if n > 0 => {
+                self.job_row = (self.job_row + 1) % n;
+                None
+            }
+            KeyCode::Char('a') | KeyCode::Char('A') => Some(self.world.accept_offer(self.job_row)),
+            KeyCode::Char('1') => Some(self.world.join(crate::sim::mission::Guild::Traders)),
+            KeyCode::Char('2') => Some(self.world.join(crate::sim::mission::Guild::Watch)),
+            _ => None,
+        };
+        if let Some(r) = note {
+            self.dock_note = Some(match r {
+                Ok(s) | Err(s) => s,
+            });
+        }
+        self.job_row = self.job_row.min(self.world.offers.len().saturating_sub(1));
+    }
+
+    fn bar_key(&mut self, k: KeyEvent) {
+        if matches!(k.code, KeyCode::Char('a') | KeyCode::Char('A')) {
+            self.dock_note = Some(match self.world.accept_fixer() {
+                Ok(s) | Err(s) => s,
+            });
+        }
+    }
+
     fn comms_key(&mut self, k: KeyEvent) {
         let Some(id) = self.hailing else {
             self.screen = Screen::Flight;
@@ -182,6 +218,20 @@ impl App {
     }
 
     fn dock_key(&mut self, k: KeyEvent) {
+        match k.code {
+            KeyCode::Tab => {
+                self.dock_tab = (self.dock_tab + 1) % 3;
+                return;
+            }
+            KeyCode::BackTab => {
+                self.dock_tab = (self.dock_tab + 2) % 3;
+                return;
+            }
+            KeyCode::Char('r') | KeyCode::Char('R') | KeyCode::Char('f') | KeyCode::Char('F') | KeyCode::Enter | KeyCode::Esc => {}
+            _ if self.dock_tab == 1 => return self.board_key(k),
+            _ if self.dock_tab == 2 => return self.bar_key(k),
+            _ => {}
+        }
         let many = k.modifiers.contains(KeyModifiers::SHIFT);
         let n = |c: char| if many || c.is_ascii_uppercase() { 10 } else { 1 };
         match k.code {
