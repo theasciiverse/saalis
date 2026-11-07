@@ -111,6 +111,12 @@ The Northern Reach, *a section of the asteroid belt*. Working reading
 - **Commodities** from belt life: ice, volatiles, metals, rare earths,
   hydroponic food, air, medicine and drive parts. Contraband: stims,
   unlicensed AI cores, stolen claims.
+- **The inner planets are opposing forces** (David, 2026-11-07). They
+  appear as factions in the belt: their fleets, agents, customs and
+  corporations show up in the Reach, possibly competing with each other.
+  They are not places the player visits. Which planets they are (Earth,
+  Mars, ...) and how they relate to each other is still open. The
+  inner-system navy/customs in the faction list above belongs to them.
 - **The unknown is a found artifact** (David, 2026-11-07), not an alien
   species or visitor. Something was found out in the Reach: what it is,
   who holds it and what it does are still open. It is the seed of the
@@ -172,7 +178,6 @@ RNG.
 ## Open questions (David's to decide)
 
 - [ ] Confirm the reading of the Northern Reach above
-- [ ] Are the inner planets ever visited, or only off-map powers?
 - [ ] On-foot and interior art (half-block floor plans or classic ASCII)
 - [ ] Quest format: own declarative format, or an embedded language
       (such as Rhai)
