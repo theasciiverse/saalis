@@ -175,6 +175,24 @@ frame tests). Other sources:
 The simulation stays free of terminal code. It uses its own SplitMix64
 RNG.
 
+### House rules that apply (from `asciiverse/CLAUDE.md`)
+
+- **Session logging** with `log` + `env_logger`. Log every raw input
+  event where it arrives, before dispatch. Log discrete state changes
+  (launch, land, jump, pause, mode switches, death). Log a snapshot
+  every 250 ms to 1 s: position, speed, target, region, mode, and what
+  is held.
+- **Standalone binary**, with its own loop and terminal setup. No shared
+  SDK is needed.
+- **No sexual content** (a hard rule: bars and pleasure stations stay
+  clean). Violence, war, smuggling and drugs as themes are fine.
+- **Store text describes the game and nothing else:** no rights hedging,
+  no build or layout notes.
+- **Versions:** 0.x.0 while unfinished and 1.0.0 when `ROADMAP.md` is
+  done, tagged `vX.Y.Z`.
+- **The `games/CLAUDE.md` index** lists Saalis under "notes only". Move
+  it to "Spiritual successors" once there is code.
+
 ## Open questions (David's to decide)
 
 - [ ] Confirm the reading of the Northern Reach above
@@ -185,9 +203,3 @@ RNG.
       (such as Rhai). Deferred by David 2026-11-07: review later.
 - [ ] Subtitle and motto, if any
 - [ ] Trademark checks (EUIPO, PRH, USPTO) before announcing
-- [ ] The house rules (session logging and so on) are in the top-level
-      `asciiverse/CLAUDE.md` on beast. Sibling repos cite it as
-      `../../CLAUDE.md` from `games/<id>/`. Not on this machine yet.
-      `games/CLAUDE.md` (copied 2026-11-07 to `~/code/games-CLAUDE.md`)
-      is only the catalog index. It lists Saalis under "notes only";
-      move it to "Spiritual successors" once there is code.
