@@ -5,22 +5,31 @@ line of Elite, Wing Commander: Privateer and above all **Ascii Sector**
 (Laserbrain Studios), rebuilt for the terminal in Rust + Ratatui with a
 universe of our own.
 
-**Status (2026-11-07):** 0.1.0 is built: a flight and combat sandbox
-round Routa station. It plays in `--demo` and responds to keys in a tmux
-smoke test. No person has played it yet, so balance and feel are
-untuned. Design decisions are below, and the release plan is in
-`ROADMAP.md`.
+**Status (2026-11-07):** 0.2.0 is built.
+- Nine belt regions joined by lanes, with seven bases and their markets.
+- The nav map, plotted courses, the autopilot (it drops out when
+  claim-jumpers turn up on the way), jumps, landing, the exchange,
+  repairs, and saving at the dock.
+- Tested by unit tests and by a scripted tmux run: buy, launch,
+  autopilot, jump, autopilot, land, autosave, continue.
+- No person has played it yet, so prices, encounter rates and balance
+  are untuned.
+
+Design decisions are below, and the release plan is in `ROADMAP.md`.
 
 ## Running
 
 ```bash
 cargo run --release                   # title (the game flies itself behind it)
-cargo run --release -- --play         # straight into the cockpit
+cargo run --release -- --play         # straight into a new game, docked at Routa
 cargo run --release -- --demo --seed 7
 cargo test                            # sim, input, audio, frames at every size
 SAALIS_PRINT=1 cargo test a_frame -- --nocapture   # one 100x30 frame as text
 asciiverse/record-preview.sh          # the 100x30 catalog cast (needs asciinema 3)
 ```
+
+Saved game: `~/.local/share/saalis/save.json` (`SAALIS_DATA_DIR` moves
+it). Saves happen only at the dock: on every landing, and with F.
 
 Session log: `~/.local/state/saalis/session.log`, started fresh each run.
 It holds every raw key, every state change, the comms, kills and waves,
@@ -36,8 +45,13 @@ Braille, so stars and the radar show as boxes there).
 - `src/sim/`: the simulation, with no terminal code.
   - `ship.rs`: hull classes, flight, facings and damage.
   - `ai.rs`: pilots (lead aim, break, flee); also the demo autopilot.
-  - `mod.rs`: the world (shots, collisions, waves, comms, repair at the
-    dock, the log snapshot).
+  - `mod.rs`: the world: regions, bases, the clock (a game minute per
+    second of flight), the autopilot, jumps, landing, trade and repair,
+    shots, collisions, encounters, comms, the log snapshot.
+  - `sector.rs`: the Reach's regions, lanes, bases and rocks.
+  - `econ.rs`: goods and markets. Prices follow stock, and stock drifts
+    back by the hour.
+  - `save.rs`: the one save slot, as versioned JSON.
   - `v2.rs`: vectors. Heading 0 is up and angles grow clockwise.
   - `rng.rs`, `cue.rs`.
 - `src/render/`: drawing.
@@ -48,8 +62,11 @@ Braille, so stars and the radar show as boxes there).
   - `glyphs.rs`: ships (a glyph, plus the Braille nose line and wake with
     crowd detail) and the box-drawing schematics.
   - `hud.rs`: gauges, the radar, the target box and comms.
+  - `navmap.rs`: the region and sector maps.
+  - `dock.rs`: the base and the exchange.
   - `mod.rs`: the layout and the cards (title, keys, pause, quit, ship
     lost).
+- `app.rs`: screens (title, flight, map, dock) and the menus' keys.
 - Other modules:
   - `input.rs`: Kaiku's three-tier held keys plus one-shot commands.
   - `pad.rs`: gilrs.
@@ -60,7 +77,8 @@ Braille, so stars and the radar show as boxes there).
 - Names are placeholders until the Reach's own names are settled:
   - hulls: Tiira (the player's, `#`), Kärppä (`x`), Ahma (`H`), Karhu
     (`M`)
-  - Routa station
+  - the regions and bases in `sector.rs` (Pallas is real and keeps its
+    name)
   - the pirates' callsigns
 
 ## Name

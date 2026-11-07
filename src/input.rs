@@ -138,6 +138,18 @@ pub struct Commands {
     pub confirm: bool,
     /// latched mode: throttle steps, signed
     pub step: f32,
+    /// N: the nav map
+    pub map: bool,
+    /// G: autopilot
+    pub auto: bool,
+    /// J: jump through a lane
+    pub jump: bool,
+    /// L: land
+    pub land: bool,
+    /// [ and ]: the previous or next nav point
+    pub nav_step: i32,
+    /// C on the title: continue the saved game
+    pub cont: bool,
 }
 
 pub struct Input {
@@ -156,6 +168,10 @@ pub struct Input {
     pub help: bool,
     pub paused: bool,
     pub pad_name: Option<String>,
+    /// keys go to a menu (the map, the dock): every press is queued in
+    /// `pressed` and nothing flies
+    pub menu: bool,
+    pub pressed: Vec<KeyEvent>,
 }
 
 impl Input {
@@ -186,6 +202,8 @@ impl Input {
             help: false,
             paused: false,
             pad_name: None,
+            menu: false,
+            pressed: Vec::new(),
         }
     }
 
@@ -236,6 +254,12 @@ impl Input {
             }
             return;
         }
+        if self.menu {
+            if press {
+                self.pressed.push(k);
+            }
+            return;
+        }
         if let Some((key, source)) = held_key(&k) {
             self.held(key, source, !release, press, now);
             return;
@@ -250,6 +274,13 @@ impl Input {
             KeyCode::Home => self.cmd.full = true,
             KeyCode::End | KeyCode::Backspace => self.cmd.stop = true,
             KeyCode::Enter => self.cmd.confirm = true,
+            KeyCode::Char('n') | KeyCode::Char('N') => self.cmd.map = true,
+            KeyCode::Char('g') | KeyCode::Char('G') => self.cmd.auto = true,
+            KeyCode::Char('j') | KeyCode::Char('J') => self.cmd.jump = true,
+            KeyCode::Char('l') | KeyCode::Char('L') => self.cmd.land = true,
+            KeyCode::Char('c') | KeyCode::Char('C') => self.cmd.cont = true,
+            KeyCode::Char('[') => self.cmd.nav_step -= 1,
+            KeyCode::Char(']') => self.cmd.nav_step += 1,
             KeyCode::Char('p') | KeyCode::Char('P') => self.paused = !self.paused,
             KeyCode::F(8) => self.mute = true,
             KeyCode::Esc => self.confirm_quit = true,
@@ -412,6 +443,18 @@ mod tests {
         press(&mut i, KeyCode::Left, t0);
         assert!((i.cmd.step - 2.0 * LATCH_STEP).abs() < 1e-6);
         assert_eq!(i.controls(ms(t0, 5000)).turn, -1.0, "turning stays on");
+    }
+
+    #[test]
+    fn a_menu_takes_every_press_and_nothing_flies() {
+        let t0 = Instant::now();
+        let mut i = Input::with_mode(Mode::Exact);
+        i.menu = true;
+        press(&mut i, KeyCode::Up, t0);
+        press(&mut i, KeyCode::Esc, t0);
+        assert_eq!(i.pressed.len(), 2);
+        assert_eq!(i.controls(t0).throttle, 0.0);
+        assert!(!i.confirm_quit, "Esc belongs to the menu");
     }
 
     #[test]

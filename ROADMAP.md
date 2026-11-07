@@ -17,8 +17,11 @@ Built 2026-11-07. Still to do: a person plays it and tunes it.
 - [x] `--demo` autopilot and the first preview cast
 
 ## 0.2.0: the Reach
-- [ ] Belt regions joined by drive lanes, nav and sector maps, autopilot
-- [ ] Landing, base menus, commodity exchange, saving
+
+Built 2026-11-07.
+
+- [x] Belt regions joined by drive lanes, nav and sector maps, autopilot
+- [x] Landing, base menus, commodity exchange, saving
 
 ## 0.3.0: people
 - [ ] Factions and attitude, comms, encounters by region owner

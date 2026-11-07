@@ -104,8 +104,10 @@ pub struct Class {
     pub guns: &'static [Gun],
     /// collision and hit radius, metres
     pub radius: f32,
-    /// bounty, for the score
+    /// bounty, credits
     pub bounty: u32,
+    /// cargo hold, units
+    pub cargo: u32,
 }
 
 pub static TIIRA: Class = Class {
@@ -126,6 +128,7 @@ pub static TIIRA: Class = Class {
     guns: &[LASER, LASER],
     radius: 30.0,
     bounty: 0,
+    cargo: 30,
 };
 
 pub static KARPPA: Class = Class {
@@ -146,6 +149,7 @@ pub static KARPPA: Class = Class {
     guns: &[LASER],
     radius: 28.0,
     bounty: 150,
+    cargo: 0,
 };
 
 pub static AHMA: Class = Class {
@@ -166,6 +170,7 @@ pub static AHMA: Class = Class {
     guns: &[DRIVER, DRIVER],
     radius: 34.0,
     bounty: 400,
+    cargo: 0,
 };
 
 pub static KARHU: Class = Class {
@@ -186,6 +191,7 @@ pub static KARHU: Class = Class {
     guns: &[LASER, DRIVER, LASER],
     radius: 48.0,
     bounty: 1200,
+    cargo: 0,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

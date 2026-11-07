@@ -1,6 +1,7 @@
 //! Saalis: flight, combat and trade in the Northern Reach of the asteroid
-//! belt. 0.1: one belt region round Routa station, and claim-jumpers.
+//! belt.
 
+mod app;
 mod audio;
 mod input;
 mod log;
@@ -8,6 +9,7 @@ mod pad;
 mod render;
 mod sim;
 
+use app::{App, Screen};
 use input::Input;
 use ratatui::crossterm::event::{self, DisableFocusChange, EnableFocusChange, Event, KeyEventKind, KeyModifiers, KeyboardEnhancementFlags, PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags};
 use ratatui::crossterm::execute;
@@ -26,7 +28,7 @@ const SNAPSHOT: Duration = Duration::from_millis(500);
 const USAGE: &str = "saalis: flight, combat and trade in the Northern Reach
 
   saalis            title screen
-  saalis --play     straight into the cockpit
+  saalis --play     straight into a new game
   saalis --demo     the game plays itself (any key ends it)
   saalis --seed N   the same region and waves each time
   saalis --mute     no sound
@@ -117,13 +119,13 @@ fn fresh_seed() -> u64 {
 }
 
 /// The demo pilot: the AI's brain at a high skill, never running, hunting the
-/// nearest pirate; with none about, it loops round the station.
+/// nearest pirate; with none about, it loops round the nearest base.
 fn autopilot(brain: &mut Brain, w: &mut World) -> Intent {
     let Some(me) = w.player().cloned() else { return Intent::default() };
     brain.target = w.target;
     let obstacles = w.obstacles();
     if brain.target.is_none() {
-        let home = w.station.pos;
+        let home = w.bases.first().map(|b| b.pos).unwrap_or_default();
         let to = home - me.pos;
         let want = if to.len() > 1500.0 { to.heading() } else { to.heading() + 1.6 };
         let turn = (sim::v2::turn_to(me.heading, want) * 3.0).clamp(-1.0, 1.0);
@@ -135,9 +137,11 @@ fn autopilot(brain: &mut Brain, w: &mut World) -> Intent {
 
 fn run(terminal: &mut DefaultTerminal, kitty: bool, args: &Args, mut audio: audio::Audio) -> io::Result<()> {
     let seed = || args.seed.unwrap_or_else(fresh_seed);
-    let mut world = World::new(seed());
-    let mut title = !args.play && !args.demo;
-    let demo = args.demo;
+    let screen = if args.demo { Screen::Flight } else { Screen::Title };
+    let mut app = App::new(World::demo(seed()), screen, args.demo);
+    if args.play {
+        app.new_game(seed());
+    }
     // behind the title the game flies itself, as in the demo
     let mut pilot = Brain::new(0.85, 0.0);
     let mut input = Input::new(kitty);
@@ -145,13 +149,13 @@ fn run(terminal: &mut DefaultTerminal, kitty: bool, args: &Args, mut audio: audi
     let mut aspect = render::view::cell_aspect();
     let mut next = Instant::now() + TICK;
     let mut snap = Instant::now();
-    let mut was = (title, Phase::Flying, false, false, false);
-    ::log::info!("screen {} aspect={aspect:.2}", if title { "title" } else { "play" });
+    let mut was = (app.screen, Phase::Flying, false, false, false);
+    ::log::info!("screen {:?} aspect={aspect:.2}", app.screen);
     while !input.quit {
         pad.poll();
         input.pad_name = pad.name.clone();
         let presses = pad.take_presses();
-        if presses.pause {
+        if presses.pause && !app.in_menu() {
             input.paused = !input.paused;
         }
         if presses.help {
@@ -163,7 +167,7 @@ fn run(terminal: &mut DefaultTerminal, kitty: bool, args: &Args, mut audio: audi
 
         let note = input.mode_note();
         terminal.draw(|f| {
-            let ui = render::Ui { world: &world, title, help: input.help, paused: input.paused, confirm_quit: input.confirm_quit, demo, note, aspect };
+            let ui = render::Ui { app: &app, help: input.help, paused: input.paused, confirm_quit: input.confirm_quit, note, aspect };
             render::draw(f, &ui);
         })?;
 
@@ -174,7 +178,7 @@ fn run(terminal: &mut DefaultTerminal, kitty: bool, args: &Args, mut audio: audi
                         ::log::debug!("key {:?} {:?} {:?}", k.code, k.kind, k.modifiers);
                         // the demo plays itself: any key ends it (not a Ctrl
                         // combination such as the ^D of a closed stdin)
-                        if demo && k.kind == KeyEventKind::Press && !k.modifiers.contains(KeyModifiers::CONTROL) {
+                        if app.demo && k.kind == KeyEventKind::Press && !k.modifiers.contains(KeyModifiers::CONTROL) {
                             input.quit = true;
                         }
                         input.on_key(k, Instant::now());
@@ -185,7 +189,7 @@ fn run(terminal: &mut DefaultTerminal, kitty: bool, args: &Args, mut audio: audi
                     }
                     Event::FocusLost => {
                         input.release_all();
-                        if !title && !demo && !input.paused {
+                        if app.screen == Screen::Flight && !app.demo && !input.paused {
                             input.paused = true;
                             ::log::info!("focus lost: paused");
                         }
@@ -199,45 +203,97 @@ fn run(terminal: &mut DefaultTerminal, kitty: bool, args: &Args, mut audio: audi
             }
         }
 
+        // the map and the dock take keys as presses
+        for k in std::mem::take(&mut input.pressed) {
+            app.menu_key(k);
+        }
+        if std::mem::take(&mut app.ask_quit) {
+            input.confirm_quit = true;
+        }
+
         let now = Instant::now();
         let mut steps = 0;
         while now >= next && steps < 5 {
             let cmd = std::mem::take(&mut input.cmd);
             let held = !input.help && !input.confirm_quit && !input.paused;
-            if title && cmd.confirm && held {
-                title = false;
-                world = World::new(seed());
-                ::log::info!("launch from the title");
-            } else if held {
-                if world.phase == Phase::Lost && ((cmd.confirm && world.phase_t > 2.0) || ((title || demo) && world.phase_t > 3.0)) {
-                    world.relaunch();
+            if app.screen == Screen::Title && held {
+                if cmd.confirm {
+                    app.new_game(seed());
+                } else if cmd.cont && !app.continue_game() {
+                    ::log::info!("no save to continue");
                 }
-                let intent = if title || demo {
-                    autopilot(&mut pilot, &mut world)
-                } else {
+            }
+            if held {
+                let w = &mut app.world;
+                if w.phase == Phase::Lost {
+                    let auto = app.screen == Screen::Title || app.demo;
+                    if auto && w.phase_t > 3.0 {
+                        let mut fresh = World::demo(seed());
+                        fresh.cues.clear();
+                        app.world = fresh;
+                    } else if cmd.confirm && w.phase_t > 2.0 && !auto {
+                        if !app.continue_game() {
+                            app.new_game(seed());
+                        }
+                    }
+                }
+                let w = &mut app.world;
+                let flying = app.screen == Screen::Flight;
+                let intent = if app.screen == Screen::Title || app.demo {
+                    autopilot(&mut pilot, w)
+                } else if flying {
                     if cmd.target {
-                        world.cycle_target();
+                        w.cycle_target();
                     }
                     if cmd.nearest {
-                        world.nearest_target();
+                        w.nearest_target();
+                    }
+                    if cmd.nav_step != 0 {
+                        w.cycle_nav(cmd.nav_step);
+                    }
+                    if cmd.auto {
+                        w.toggle_autopilot();
+                    }
+                    if cmd.jump {
+                        w.jump();
+                    }
+                    if cmd.land {
+                        w.land();
                     }
                     let c = Input::with_pad(input.controls(now), &pad.state);
+                    // any hand on the controls takes over from the autopilot
+                    if w.autopilot && (c.turn != 0.0 || c.throttle != 0.0 || c.fire || c.burner || cmd.full || cmd.stop) {
+                        w.autopilot = false;
+                        ::log::info!("autopilot off: the pilot took over");
+                    }
                     let mut it = Intent { turn: c.turn, throttle: c.throttle, fire: c.fire, burner: c.burner, set_speed: None };
-                    if let Some(p) = world.player() {
+                    if let Some(p) = w.player() {
                         let max = p.class.max_speed;
                         if cmd.full {
                             it.set_speed = Some(max);
                         } else if cmd.stop {
                             it.set_speed = Some(0.0);
                         } else if cmd.match_speed {
-                            it.set_speed = world.match_speed().map(|s| s.min(max));
+                            it.set_speed = w.match_speed().map(|s| s.min(max));
                         } else if cmd.step != 0.0 {
                             it.set_speed = Some((p.set_speed + cmd.step * max * 0.25).clamp(0.0, max));
                         }
                     }
+                    if cmd.map {
+                        app.open_map();
+                    }
                     it
+                } else {
+                    Intent::default()
                 };
-                world.update(&intent, DT);
+                // the map is a glance: the field plays on behind it
+                app.world.update(&intent, DT);
+                app.follow();
+            }
+            input.menu = app.in_menu();
+            if input.menu {
+                input.release_all();
+                input.paused = false;
             }
             next += TICK;
             steps += 1;
@@ -250,27 +306,28 @@ fn run(terminal: &mut DefaultTerminal, kitty: bool, args: &Args, mut audio: audi
             audio.muted = !audio.muted;
             ::log::info!("muted: {}", audio.muted);
         }
-        for cue in world.cues.drain(..) {
+        let quiet = app.screen == Screen::Title;
+        for cue in app.world.cues.drain(..) {
             // the title's dogfight plays quietly: no rumble, no guns
-            if title && !matches!(cue, sim::cue::Cue::Kill | sim::cue::Cue::BigKill) {
+            if quiet && !matches!(cue, sim::cue::Cue::Kill | sim::cue::Cue::BigKill) {
                 continue;
             }
             audio.play(cue);
-            if !demo {
+            if !app.demo {
                 pad.feel(cue);
             }
         }
 
-        let state = (title, world.phase, input.paused, input.help, input.confirm_quit);
+        let state = (app.screen, app.world.phase, input.paused, input.help, input.confirm_quit);
         if state != was {
-            ::log::info!("state title={} phase={:?} paused={} help={} confirm_quit={}", state.0, state.1, state.2, state.3, state.4);
+            ::log::info!("state screen={:?} phase={:?} paused={} help={} confirm_quit={}", state.0, state.1, state.2, state.3, state.4);
             was = state;
         }
         if snap.elapsed() >= SNAPSHOT {
             snap = Instant::now();
-            ::log::debug!("snapshot {}", world.snapshot());
+            ::log::debug!("snapshot {}", app.world.snapshot());
         }
     }
-    ::log::info!("quit wave={} kills={} score={}", world.wave, world.kills, world.score);
+    ::log::info!("quit {}", app.world.snapshot());
     Ok(())
 }

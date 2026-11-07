@@ -9,7 +9,7 @@ use super::palette::{self as pal, rgb, scale, Rgb};
 use super::view::View;
 use crate::sim::v2::{v2, V2};
 use crate::sim::ship::Side;
-use crate::sim::{Phase, Rock, SparkKind, World};
+use crate::sim::{Nav, Phase, Rock, SparkKind, Station, World};
 use ratatui::buffer::Buffer;
 use ratatui::style::{Color, Style};
 
@@ -25,8 +25,10 @@ pub fn draw(buf: &mut Buffer, view: &View, w: &World) {
             rock(&mut c, view, r);
         }
     }
-    if view.sees(w.station.pos, w.station.radius) {
-        station(&mut c, view, w);
+    for b in &w.bases {
+        if view.sees(b.pos, b.radius) {
+            station(&mut c, view, b, w.time);
+        }
     }
     for b in &w.blasts {
         if !view.sees(b.pos, b.radius) {
@@ -74,13 +76,22 @@ pub fn draw(buf: &mut Buffer, view: &View, w: &World) {
     }
     c.blit(buf, a, pal::SPACE);
 
-    if view.sees(w.station.pos, w.station.radius + 400.0) {
-        dock(buf, view, w);
+    for b in &w.bases {
+        if view.sees(b.pos, b.radius + 400.0) {
+            dock(buf, view, b, w.time);
+        }
+    }
+    for to in w.sector.neighbours(w.region) {
+        let m = w.sector.mouth(w.region, to);
+        if view.sees(m, 600.0) {
+            gate(buf, view, m, w.sector.regions[to].name, w.time);
+        }
     }
     for s in &seen {
         glyphs::glyph(buf, view, s, w.fleeing(s.id));
     }
     if w.phase == Phase::Flying {
+        nav_arrow(buf, view, w);
         target_marks(buf, view, w);
     }
 }
@@ -183,11 +194,10 @@ fn rock(c: &mut Canvas, view: &View, r: &Rock) {
     }
 }
 
-/// Routa: a slowly turning ring habitat seen from above, with lit windows,
+/// A base: a slowly turning ring habitat seen from above, with lit windows,
 /// four spokes and a hub.
-fn station(c: &mut Canvas, view: &View, w: &World) {
-    let st = &w.station;
-    let spin = w.time * 0.05;
+fn station(c: &mut Canvas, view: &View, st: &Station, time: f32) {
+    let spin = time * 0.05;
     let (pw, phm) = view.pixel_m();
     let (cx, cy) = view.pixel(st.pos);
     let (rx, ry) = ((st.radius / pw).ceil() as i32 + 1, (st.radius / phm).ceil() as i32 + 1);
@@ -222,8 +232,7 @@ fn station(c: &mut Canvas, view: &View, w: &World) {
 
 /// The docking arm north of the ring, in box-drawing lines, with blinking
 /// lamps at its mouth; and the station's name.
-fn dock(buf: &mut Buffer, view: &View, w: &World) {
-    let st = &w.station;
+fn dock(buf: &mut Buffer, view: &View, st: &Station, time: f32) {
     let a = view.area;
     let top = st.pos + v2(0.0, -(st.radius + 220.0));
     let bottom = st.pos + v2(0.0, -st.radius * 0.95);
@@ -244,7 +253,7 @@ fn dock(buf: &mut Buffer, view: &View, w: &World) {
             put(buf, v2(st.pos.x + sx, y), ch, wire);
         }
     }
-    let blink = (w.time * 2.0) as i32 % 2 == 0;
+    let blink = (time * 2.0) as i32 % 2 == 0;
     let lamp = Style::default().fg(if blink { Color::Rgb(120, 255, 160) } else { Color::Rgb(30, 90, 50) });
     put(buf, top + v2(-half - view.scale, 0.0), "•", lamp);
     put(buf, top + v2(half + view.scale, 0.0), "•", lamp);
@@ -279,12 +288,58 @@ fn target_marks(buf: &mut Buffer, view: &View, w: &World) {
         }
         return;
     }
-    // off screen: walk from the centre toward it until the border
+    edge_arrow(buf, view, t.pos, style);
+}
+
+/// A drive lane's mouth: a box-drawing gate with the destination's name.
+fn gate(buf: &mut Buffer, view: &View, at: V2, name: &str, time: f32) {
+    let a = view.area;
+    let Some((x, y)) = view.cell(at) else { return };
+    let pulse = 0.7 + 0.3 * (time * 2.5).sin();
+    let col = rgb(scale(pal::LANE, pulse));
+    let style = Style::default().fg(col);
+    let rows = ["╭─────╮", "│     │", "╰─────╯"];
+    for (k, row) in rows.iter().enumerate() {
+        let ry = y as i32 - 1 + k as i32;
+        for (j, ch) in row.chars().enumerate() {
+            let rx = x as i32 - 3 + j as i32;
+            if ch != ' ' && rx >= 0 && ry >= 0 && rx < a.width as i32 && ry < a.height as i32 {
+                buf[(a.x + rx as u16, a.y + ry as u16)].set_char(ch).set_style(style);
+            }
+        }
+    }
+    let label = format!("lane ▸ {name}");
+    let ly = y as i32 + 2;
+    if ly < a.height as i32 {
+        let lx = (x as i32 - label.chars().count() as i32 / 2).max(0) as u16;
+        let room = a.width.saturating_sub(lx) as usize;
+        let text: String = label.chars().take(room).collect();
+        buf.set_string(a.x + lx, a.y + ly as u16, text, Style::default().fg(pal::DIM));
+    }
+}
+
+/// An arrow at the field's edge toward the nav point when it is off screen.
+fn nav_arrow(buf: &mut Buffer, view: &View, w: &World) {
+    let Some(n) = w.nav else { return };
+    let col = match n {
+        Nav::Base(_) => pal::TRAFFIC,
+        Nav::Mouth(_) => rgb(pal::LANE),
+    };
+    edge_arrow(buf, view, w.nav_pos(n), Style::default().fg(col));
+}
+
+/// An arrow on the field's border pointing toward `p`, if it is off screen.
+fn edge_arrow(buf: &mut Buffer, view: &View, p: V2, style: Style) {
+    let a = view.area;
+    let (fx, fy) = view.cell_f(p);
+    if fx >= 0.0 && fy >= 0.0 && fx < a.width as f32 && fy < a.height as f32 {
+        return;
+    }
     let (mx, my) = (a.width as f32 / 2.0, a.height as f32 / 2.0);
     let (dx, dy) = (fx - mx, fy - my);
     let k = ((mx - 1.0) / dx.abs().max(1e-3)).min((my - 1.0) / dy.abs().max(1e-3));
     let (ex, ey) = ((mx + dx * k).clamp(0.0, a.width as f32 - 1.0), (my + dy * k).clamp(0.0, a.height as f32 - 1.0));
-    let ang = (t.pos - view.centre).heading();
+    let ang = (p - view.centre).heading();
     const ARROWS: [&str; 8] = ["↑", "↗", "→", "↘", "↓", "↙", "←", "↖"];
     let i = ((ang / std::f32::consts::FRAC_PI_4).round() as i32).rem_euclid(8) as usize;
     buf[(a.x + ex as u16, a.y + ey as u16)].set_symbol(ARROWS[i]).set_style(style);

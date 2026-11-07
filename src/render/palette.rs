@@ -35,6 +35,8 @@ pub const TARGET: Color = Color::Rgb(255, 196, 80);
 pub const STATION: Rgb = (150, 170, 190);
 pub const WINDOW: Rgb = (255, 210, 130);
 pub const ROCK: [Rgb; 3] = [(120, 108, 96), (104, 100, 98), (130, 118, 100)];
+/// Drive lanes: their gates, the map's routes.
+pub const LANE: Rgb = (176, 140, 255);
 pub const TRAFFIC: Color = Color::Rgb(130, 220, 200);
 
 pub fn rgb(c: Rgb) -> Color {

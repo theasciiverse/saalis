@@ -6,7 +6,7 @@
 use super::glyphs;
 use super::palette::{self as pal, rgb, Rgb};
 use crate::sim::ship::{Facing, Side};
-use crate::sim::{Comm, World};
+use crate::sim::{Comm, Nav, World};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
@@ -17,12 +17,13 @@ const PARTIAL: [char; 7] = ['▏', '▎', '▍', '▌', '▋', '▊', '▉'];
 const LEVEL: [char; 8] = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
 
 pub fn frame(title: &str) -> Block<'_> {
-    Block::default()
-        .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(pal::FRAME))
-        .title(Span::styled(format!(" {title} "), Style::default().fg(pal::DIM)))
-        .style(Style::default().bg(pal::CHROME_BG))
+    let b = Block::default().borders(Borders::ALL).border_type(BorderType::Rounded).border_style(Style::default().fg(pal::FRAME)).style(Style::default().bg(pal::CHROME_BG));
+    if title.is_empty() { b } else { b.title(Span::styled(format!(" {title} "), Style::default().fg(pal::DIM))) }
+}
+
+/// A distance for the HUD: metres up close, kilometres further out.
+pub fn distance(d: f32) -> String {
+    if d >= 1000.0 { format!("{:.1} km", d / 1000.0) } else { format!("{:.0} m", d) }
 }
 
 /// A horizontal gauge `width` cells long, in block eighths.
@@ -49,7 +50,20 @@ fn label(s: &str) -> Span<'static> {
 
 /// The top bar: two rows of the player's own state.
 pub fn top(buf: &mut Buffer, area: Rect, w: &World) {
-    let block = frame("SAALIS · Northern Reach");
+    let mut block = frame("").title(Span::styled(format!(" SAALIS · {} · {} ", w.region_name(), w.date()), Style::default().fg(pal::DIM)));
+    if let (Some(n), Some(p)) = (w.nav, w.player()) {
+        let d = (w.nav_pos(n) - p.pos).len();
+        let col = match n {
+            Nav::Base(_) => pal::TRAFFIC,
+            Nav::Mouth(_) => rgb(pal::LANE),
+        };
+        let mut spans = vec![Span::styled(" NAV ▸ ", Style::default().fg(pal::DIM)), Span::styled(w.nav_name(n), Style::default().fg(col)), Span::styled(format!(" {} ", distance(d)), Style::default().fg(pal::TEXT))];
+        if w.autopilot {
+            spans.push(Span::styled(" AUTO ", Style::default().fg(Color::Rgb(10, 14, 20)).bg(col)));
+            spans.push(Span::raw(" "));
+        }
+        block = block.title(Line::from(spans).right_aligned());
+    }
     let inner = block.inner(area);
     block.render(area, buf);
     let Some(p) = w.ships.first() else { return };
@@ -99,7 +113,8 @@ pub fn bottom(buf: &mut Buffer, area: Rect, w: &World, note: Option<&str>) {
         }
     }
     left.push(Span::raw("  "));
-    let tally = format!("WAVE {}  KILLS {}  {} cr", w.wave, w.kills, w.score);
+    let max = w.ships.first().map_or(0, |p| p.class.cargo);
+    let tally = format!("{} cr  HOLD {}/{}  KILLS {}", w.credits, w.cargo_used(), max, w.kills);
     let mut right = Vec::new();
     if let Some(n) = note {
         right.push(Span::styled(format!("{n}  "), Style::default().fg(pal::TRACE)));
@@ -167,9 +182,17 @@ pub fn radar(buf: &mut Buffer, area: Rect, w: &World, aspect: f32) {
             c.dot(x, y, Color::Rgb(90, 82, 74));
         }
     }
-    let ((sx, sy), _) = place(w.station.pos);
-    for (dx, dy) in [(0, 0), (1, 0), (0, 1), (1, 1)] {
-        c.dot(sx + dx, sy + dy, pal::TRAFFIC);
+    let blob = |c: &mut super::canvas::Canvas, (x, y): (i32, i32), col: Color| {
+        for (dx, dy) in [(0, 0), (1, 0), (0, 1), (1, 1)] {
+            c.dot(x + dx, y + dy, col);
+        }
+    };
+    for b in &w.bases {
+        blob(&mut c, place(b.pos).0, pal::TRAFFIC);
+    }
+    for to in w.sector.neighbours(w.region) {
+        let (at, out) = place(w.sector.mouth(w.region, to));
+        blob(&mut c, at, if out { rgb(pal::scale(pal::LANE, 0.55)) } else { rgb(pal::LANE) });
     }
     for s in w.ships.iter().filter(|s| s.alive && s.side == Side::Pirate) {
         let ((x, y), out) = place(s.pos);
@@ -241,8 +264,7 @@ pub fn target(buf: &mut Buffer, area: Rect, w: &World) {
         lines.push(Line::from(row));
     }
     if let Some(me) = me {
-        let d = (t.pos - me.pos).len();
-        let dist = if d >= 1000.0 { format!("{:.1} km", d / 1000.0) } else { format!("{:.0} m", d) };
+        let dist = distance((t.pos - me.pos).len());
         let mut l = vec![label("RANGE "), Span::styled(dist, Style::default().fg(pal::TEXT)), label("  SPD "), Span::styled(format!("{:.0}", t.speed()), Style::default().fg(pal::TEXT))];
         if w.fleeing(t.id) {
             l.push(Span::styled("  running", Style::default().fg(pal::DIM)));

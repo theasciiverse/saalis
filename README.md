@@ -3,11 +3,14 @@
 **THE HIGH BELT DOESN'T FORGIVE.**
 
 Flight, combat and trade in the Northern Reach, the cold, high fringe of
-the asteroid belt. You fly a light courier-fighter out of Routa station,
-and claim-jumpers want your hull. Turn, throttle, burn and shoot in real
-time from a top-down view. Shields recharge from one energy pool and guard
-four facings. Under them is armour that doesn't come back until the dock
-crews patch it.
+the asteroid belt. You fly a light courier-fighter out of Routa Station,
+with 2,000 credits and an empty hold. Nine belt regions are joined by
+drive lanes. Mines sell ice and ore, refineries want them, farms grow the
+Reach's food and air, and every market moves with what you buy and sell.
+Claim-jumpers work the lanes, worst where no station watches. Fly and
+fight in real time from a top-down view. Shields recharge from one energy
+pool and guard four facings. Under them is armour that only a dock can
+patch.
 
 ## Play
 
@@ -36,10 +39,19 @@ comfortable.
 | Tab | afterburner (hold) |
 | T | next target |
 | R | nearest target |
+| N | nav map (Tab in it: the whole Reach) |
+| [ ] | previous, next nav point |
+| G | autopilot to the nav point |
+| J | jump through a lane mouth |
+| L | land at a base (close and slow) |
 | P | pause |
 | F8 | sound on or off |
 | F1 | keys |
 | Esc | quit |
+
+Docked: ↑ ↓ choose a good, B or → buys, S or ← sells (Shift for ten),
+R repairs, F saves, Enter launches. Every landing saves the game; C on
+the title continues it.
 
 Gamepad: the left stick turns and throttles, A fires, B burns, the right
 bumper picks the next target, the left bumper the nearest, Start pauses.
@@ -47,7 +59,7 @@ bumper picks the next target, the left bumper the nearest, Start pauses.
 ## Options
 
 ```
-saalis --play      straight into the cockpit
+saalis --play      straight into a new game
 saalis --demo      the game plays itself (any key ends it)
 saalis --seed N    the same region and waves each time
 saalis --mute      no sound

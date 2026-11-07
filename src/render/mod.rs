@@ -2,13 +2,16 @@
 //! them. Everything is centred in the terminal and follows a resize.
 
 pub mod canvas;
+pub mod dock;
 pub mod glyphs;
 pub mod hud;
+pub mod navmap;
 pub mod palette;
 pub mod space;
 pub mod view;
 
-use crate::sim::{Phase, World};
+use crate::app::{App, Screen};
+use crate::sim::Phase;
 use palette as pal;
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
@@ -26,12 +29,10 @@ const RIGHT_W: u16 = 26;
 
 /// What the frame needs beyond the world.
 pub struct Ui<'a> {
-    pub world: &'a World,
-    pub title: bool,
+    pub app: &'a App,
     pub help: bool,
     pub paused: bool,
     pub confirm_quit: bool,
-    pub demo: bool,
     pub note: Option<&'a str>,
     pub aspect: f32,
 }
@@ -71,7 +72,8 @@ pub fn draw(f: &mut Frame, ui: &Ui) {
 }
 
 pub fn draw_buf(buf: &mut Buffer, area: Rect, ui: &Ui) {
-    let w = ui.world;
+    let app = ui.app;
+    let w = &app.world;
     Clear.render(area, buf);
     buf.set_style(area, Style::default().bg(pal::SPACE));
     let Some(l) = layout(area, ui.aspect) else {
@@ -82,21 +84,30 @@ pub fn draw_buf(buf: &mut Buffer, area: Rect, ui: &Ui) {
         Paragraph::new(lines).centered().render(Rect::new(area.x, y, area.width, h.min(area.height)), buf);
         return;
     };
-    // the camera leads a little in the direction of flight
-    let centre = w.ships.first().map(|p| p.pos + p.vel * 0.6).unwrap_or_default();
-    let v = view::View::new(l.field, centre, ui.aspect);
-    space::draw(buf, &v, w);
+    // the field and the right panel together, for the map and the dock
+    let wide = Rect::new(l.field.x, l.field.y, l.field.width + l.radar.width, l.field.height);
     hud::top(buf, l.top, w);
     hud::bottom(buf, l.bottom, w, ui.note);
-    hud::radar(buf, l.radar, w, ui.aspect);
-    hud::target(buf, l.target, w);
-
-    if ui.title {
-        title(buf, l.field);
-    } else if w.phase == Phase::Lost {
-        lost(buf, l.field, w, ui.demo);
+    if app.screen == Screen::Dock {
+        dock::draw(buf, wide, app);
+    } else {
+        // the camera leads a little in the direction of flight
+        let centre = w.ships.first().map(|p| p.pos + p.vel * 0.6).unwrap_or_default();
+        let v = view::View::new(l.field, centre, ui.aspect);
+        space::draw(buf, &v, w);
+        hud::radar(buf, l.radar, w, ui.aspect);
+        hud::target(buf, l.target, w);
+        if app.screen == Screen::Map {
+            navmap::draw(buf, wide, app, ui.aspect);
+        }
     }
-    if ui.demo && !ui.title {
+
+    if app.screen == Screen::Title {
+        title(buf, l.field, app.saved.as_deref());
+    } else if w.phase == Phase::Lost {
+        lost(buf, l.field, w, app.demo, app.saved.is_some());
+    }
+    if app.demo && app.screen != Screen::Title {
         let s = " DEMO · any key ends it ";
         let x = l.field.x + l.field.width.saturating_sub(s.len() as u16 + 1);
         buf.set_string(x, l.field.y, s, Style::default().fg(pal::DIM).bg(pal::CHROME_BG));
@@ -104,7 +115,7 @@ pub fn draw_buf(buf: &mut Buffer, area: Rect, ui: &Ui) {
     if ui.help {
         help(buf, area);
     } else if ui.confirm_quit {
-        card(buf, area, "quit", &[Line::from("Leave the Reach?"), Line::from(""), Line::from(Span::styled("Y quits · any other key flies on", Style::default().fg(pal::DIM)))]);
+        card(buf, area, "quit", &[Line::from("Leave the Reach?"), Line::from(""), Line::from(Span::styled("Y quits · any other key stays", Style::default().fg(pal::DIM)))]);
     } else if ui.paused {
         card(buf, area, "paused", &[Line::from("Holding position."), Line::from(""), Line::from(Span::styled("P flies on · F1 keys", Style::default().fg(pal::DIM)))]);
     }
@@ -125,30 +136,34 @@ fn card(buf: &mut Buffer, area: Rect, name: &str, lines: &[Line]) {
 /// The name in box-drawing letters: clean lines (David's brief).
 const LOGO: [&str; 3] = ["╭─╴╭─╮╭─╮╷  ╶┬╴╭─╴", "╰─╮├─┤├─┤│   │ ╰─╮", "╶─╯╵ ╵╵ ╵╰─╴╶┴╴╶─╯"];
 
-fn title(buf: &mut Buffer, field: Rect) {
+fn title(buf: &mut Buffer, field: Rect, saved: Option<&str>) {
     let mut lines: Vec<Line> = LOGO.iter().map(|s| Line::from(Span::styled(*s, Style::default().fg(pal::WIRE)))).collect();
     lines.push(Line::from(""));
     lines.push(Line::from(Span::styled("The Northern Reach", Style::default().fg(pal::TEXT).add_modifier(Modifier::BOLD))));
     lines.push(Line::from(Span::styled("high above the belt, nothing is free", Style::default().fg(pal::DIM))));
     lines.push(Line::from(""));
-    lines.push(Line::from(Span::styled("Enter launch · F1 keys · Esc quit", Style::default().fg(pal::TARGET))));
+    if let Some(s) = saved {
+        lines.push(Line::from(vec![Span::styled("C continue  ", Style::default().fg(pal::TARGET)), Span::styled(s.to_string(), Style::default().fg(pal::DIM))]));
+    }
+    lines.push(Line::from(Span::styled("Enter new game · F1 keys · Esc quit", Style::default().fg(pal::TARGET))));
     card(buf, field, "", &lines);
 }
 
-fn lost(buf: &mut Buffer, field: Rect, w: &World, demo: bool) {
+fn lost(buf: &mut Buffer, field: Rect, w: &crate::sim::World, demo: bool, saved: bool) {
     let mut lines = vec![
         Line::from(Span::styled("SHIP LOST", Style::default().fg(pal::TARGET).add_modifier(Modifier::BOLD))),
         Line::from(""),
-        Line::from(format!("wave {} · {} kills · {} cr", w.wave, w.kills, w.score)),
+        Line::from(format!("{} · {} kills · {} cr", w.date(), w.kills, w.credits)),
     ];
     if w.phase_t > 2.0 && !demo {
         lines.push(Line::from(""));
-        lines.push(Line::from(Span::styled("Enter: a spare hull from Routa", Style::default().fg(pal::DIM))));
+        let what = if saved { "Enter: back to your last save" } else { "Enter: start again" };
+        lines.push(Line::from(Span::styled(what, Style::default().fg(pal::DIM))));
     }
     card(buf, field, "", &lines);
 }
 
-const KEYS: [(&str, &str); 14] = [
+const KEYS: [(&str, &str); 20] = [
     ("← →  A D", "turn"),
     ("↑ ↓  W S", "throttle up, down"),
     ("Home", "full speed"),
@@ -158,10 +173,16 @@ const KEYS: [(&str, &str); 14] = [
     ("Tab", "afterburner (hold)"),
     ("T", "next target"),
     ("R", "nearest target"),
+    ("N", "nav map (Tab in it: the Reach)"),
+    ("[  ]", "previous, next nav point"),
+    ("G", "autopilot to the nav point"),
+    ("J", "jump through a lane mouth"),
+    ("L", "land at a base (close and slow)"),
     ("P", "pause"),
     ("F8", "sound on, off"),
     ("F1", "these keys"),
     ("Esc", "quit"),
+    ("dock", "↑↓ goods · B buy · S sell · R repair · Enter launch"),
     ("pad", "stick flies · A fires · B burns · RB target"),
 ];
 
@@ -177,9 +198,14 @@ fn help(buf: &mut Buffer, area: Rect) {
 mod tests {
     use super::*;
     use crate::sim::ship::Intent;
+    use crate::sim::World;
 
-    fn ui(w: &World) -> Ui<'_> {
-        Ui { world: w, title: false, help: false, paused: false, confirm_quit: false, demo: false, note: None, aspect: 2.0 }
+    fn app(w: World, screen: Screen) -> App {
+        App { world: w, screen, map_sector: false, map_sel: 0, dock_row: 0, dock_note: None, saved: None, demo: false, ask_quit: false }
+    }
+
+    fn ui(a: &App) -> Ui<'_> {
+        Ui { app: a, help: false, paused: false, confirm_quit: false, note: None, aspect: 2.0 }
     }
 
     fn text(buf: &Buffer) -> String {
@@ -187,47 +213,78 @@ mod tests {
         (0..a.height).map(|y| (0..a.width).map(|x| buf[(x, y)].symbol().to_string()).collect::<String>() + "\n").collect()
     }
 
-    #[test]
-    fn every_screen_draws_at_every_size() {
-        let mut w = World::new(5);
-        for _ in 0..(60 * 8) {
-            w.update(&Intent::default(), 1.0 / 60.0);
-        }
-        for (cw, ch) in [(20, 6), (79, 23), (80, 24), (100, 30), (160, 50), (300, 90)] {
-            for flags in 0..5 {
-                let mut u = ui(&w);
-                u.title = flags == 1;
-                u.help = flags == 2;
-                u.paused = flags == 3;
-                u.confirm_quit = flags == 4;
-                let area = Rect::new(0, 0, cw, ch);
-                let mut buf = Buffer::empty(area);
-                draw_buf(&mut buf, area, &u);
-            }
-        }
-    }
-
-    #[test]
-    fn a_frame_shows_the_hud_and_the_player() {
-        let w = World::new(5);
-        let area = Rect::new(0, 0, 100, 30);
+    fn frame_of(a: &App, w: u16, h: u16) -> String {
+        let area = Rect::new(0, 0, w, h);
         let mut buf = Buffer::empty(area);
-        draw_buf(&mut buf, area, &ui(&w));
+        draw_buf(&mut buf, area, &ui(a));
         let t = text(&buf);
         if std::env::var("SAALIS_PRINT").is_ok() {
             println!("{t}");
         }
+        t
+    }
+
+    #[test]
+    fn every_screen_draws_at_every_size() {
+        let mut w = World::demo(5);
+        for _ in 0..(60 * 8) {
+            w.update(&Intent::default(), 1.0 / 60.0);
+        }
+        let mut a = app(w, Screen::Flight);
+        for (cw, ch) in [(20, 6), (79, 23), (80, 24), (100, 30), (160, 50), (300, 90)] {
+            for screen in [Screen::Title, Screen::Flight, Screen::Map] {
+                a.screen = screen;
+                for sector in [false, true] {
+                    a.map_sector = sector;
+                    for flags in 0..4 {
+                        let area = Rect::new(0, 0, cw, ch);
+                        let mut buf = Buffer::empty(area);
+                        let mut u = ui(&a);
+                        u.help = flags == 1;
+                        u.paused = flags == 2;
+                        u.confirm_quit = flags == 3;
+                        draw_buf(&mut buf, area, &u);
+                    }
+                }
+            }
+        }
+        let docked = app(World::new(5), Screen::Dock);
+        for (cw, ch) in [(20, 6), (80, 24), (100, 30), (300, 90)] {
+            frame_of(&docked, cw, ch);
+        }
+    }
+
+    #[test]
+    fn a_flight_frame_shows_the_hud_and_the_player() {
+        let a = app(World::demo(5), Screen::Flight);
+        let t = frame_of(&a, 100, 30);
         assert!(t.contains("SHIELD") && t.contains("ARMOUR") && t.contains("radar"));
-        assert!(t.contains('#'), "the player's hull");
-        assert!(t.contains('▄') && t.contains('│'), "the station and its dock");
+        assert!(t.contains('#'), "the player's glyph");
+        assert!(t.contains("Pallas Reach"));
+    }
+
+    #[test]
+    fn the_dock_shows_the_exchange() {
+        let a = app(World::new(5), Screen::Dock);
+        let t = frame_of(&a, 100, 30);
+        assert!(t.contains("Routa Station") && t.contains("Water ice") && t.contains("index"));
+    }
+
+    #[test]
+    fn the_map_shows_lanes_and_the_reach() {
+        let mut w = World::new(5);
+        w.launch();
+        let mut a = app(w, Screen::Map);
+        let t = frame_of(&a, 100, 30);
+        assert!(t.contains("Kide Drift"), "a lane out of Pallas Reach");
+        a.map_sector = true;
+        let t = frame_of(&a, 100, 30);
+        assert!(t.contains("Crown Gate") && t.contains("Kalmisto"));
     }
 
     #[test]
     fn too_small_says_so() {
-        let w = World::new(5);
-        let area = Rect::new(0, 0, 60, 20);
-        let mut buf = Buffer::empty(area);
-        draw_buf(&mut buf, area, &ui(&w));
-        assert!(text(&buf).contains("80x24"));
+        let a = app(World::new(5), Screen::Flight);
+        assert!(frame_of(&a, 60, 20).contains("80x24"));
     }
 }

@@ -1,0 +1,193 @@
+//! The screens around the simulation: title, flight, the nav map and the
+//! dock, and the keys that drive the map and the dock.
+
+use crate::sim::econ;
+use crate::sim::save;
+use crate::sim::{Nav, Phase, World};
+use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Screen {
+    Title,
+    Flight,
+    Map,
+    Dock,
+}
+
+pub struct App {
+    pub world: World,
+    pub screen: Screen,
+    /// the map shows the whole sector, not just this region
+    pub map_sector: bool,
+    /// the highlighted row: a nav point, or a region on the sector map
+    pub map_sel: usize,
+    /// the highlighted good at the exchange
+    pub dock_row: usize,
+    /// a line of news at the dock: what was bought, saved, repaired
+    pub dock_note: Option<String>,
+    /// what the title offers to continue, if there is a save
+    pub saved: Option<String>,
+    pub demo: bool,
+    /// set when the person asked to quit from a menu
+    pub ask_quit: bool,
+}
+
+impl App {
+    pub fn new(world: World, screen: Screen, demo: bool) -> App {
+        let saved = save::read().map(|s| save::describe(&s));
+        App { world, screen, map_sector: false, map_sel: 0, dock_row: 0, dock_note: None, saved, demo, ask_quit: false }
+    }
+
+    /// Whether keys go to a menu rather than to flight.
+    pub fn in_menu(&self) -> bool {
+        matches!(self.screen, Screen::Map | Screen::Dock)
+    }
+
+    pub fn new_game(&mut self, seed: u64) {
+        self.world = World::new(seed);
+        self.screen = Screen::Dock;
+        self.dock_note = Some("Welcome to Routa. The Reach is yours to work.".into());
+        log::info!("new game seed={seed}");
+    }
+
+    /// Loads the save; returns whether there was one.
+    pub fn continue_game(&mut self) -> bool {
+        match save::read().and_then(World::from_save) {
+            Some(w) => {
+                self.world = w;
+                self.screen = Screen::Dock;
+                self.dock_note = Some("Saved game loaded.".into());
+                log::info!("continue: {}", self.world.region_name());
+                true
+            }
+            None => false,
+        }
+    }
+
+    pub fn save(&mut self) {
+        if let Some(s) = self.world.to_save() {
+            let ok = save::write(&s);
+            self.saved = Some(save::describe(&s));
+            self.dock_note = Some(if ok { "Game saved.".into() } else { "Could not save: see the session log.".into() });
+        }
+    }
+
+    /// Called after every tick: the simulation's phase picks the screen.
+    pub fn follow(&mut self) {
+        if self.screen == Screen::Title {
+            return;
+        }
+        match self.world.phase {
+            Phase::Docked(_) if self.screen != Screen::Dock => {
+                self.screen = Screen::Dock;
+                self.dock_note = None;
+                // every landing is a save point
+                if !self.demo {
+                    self.save();
+                }
+            }
+            Phase::Flying if self.screen == Screen::Dock => self.screen = Screen::Flight,
+            Phase::Lost if self.screen == Screen::Map => self.screen = Screen::Flight,
+            _ => {}
+        }
+    }
+
+    pub fn open_map(&mut self) {
+        if self.world.phase != Phase::Flying {
+            return;
+        }
+        self.screen = Screen::Map;
+        self.map_sector = false;
+        let navs = self.world.navs();
+        self.map_sel = self.world.nav.and_then(|n| navs.iter().position(|&x| x == n)).unwrap_or(0);
+    }
+
+    /// A key on the map or at the dock.
+    pub fn menu_key(&mut self, k: KeyEvent) {
+        match self.screen {
+            Screen::Map => self.map_key(k),
+            Screen::Dock => self.dock_key(k),
+            _ => {}
+        }
+    }
+
+    fn map_key(&mut self, k: KeyEvent) {
+        let rows = if self.map_sector { self.world.sector.regions.len() } else { self.world.navs().len() };
+        match k.code {
+            KeyCode::Esc | KeyCode::Char('n') | KeyCode::Char('N') => self.screen = Screen::Flight,
+            KeyCode::Tab => {
+                self.map_sector = !self.map_sector;
+                self.map_sel = if self.map_sector { self.world.course.last().copied().unwrap_or(self.world.region) } else { 0 };
+            }
+            KeyCode::Up | KeyCode::Char('w') | KeyCode::Char('k') if rows > 0 => self.map_sel = (self.map_sel + rows - 1) % rows,
+            KeyCode::Down | KeyCode::Char('s') | KeyCode::Char('j') if rows > 0 => self.map_sel = (self.map_sel + 1) % rows,
+            KeyCode::Enter | KeyCode::Char('g') | KeyCode::Char('G') => {
+                if self.map_sector {
+                    if self.map_sel != self.world.region {
+                        self.world.plot(self.map_sel);
+                    }
+                } else if let Some(&n) = self.world.navs().get(self.map_sel) {
+                    self.world.nav = Some(n);
+                    if let Nav::Mouth(to) = n {
+                        if self.world.course.first() != Some(&to) {
+                            self.world.course.clear();
+                        }
+                    }
+                }
+                self.screen = Screen::Flight;
+                if matches!(k.code, KeyCode::Char('g') | KeyCode::Char('G')) {
+                    self.world.toggle_autopilot();
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn dock_key(&mut self, k: KeyEvent) {
+        let many = k.modifiers.contains(KeyModifiers::SHIFT);
+        let n = |c: char| if many || c.is_ascii_uppercase() { 10 } else { 1 };
+        match k.code {
+            KeyCode::Up | KeyCode::Char('w') | KeyCode::Char('k') => self.dock_row = (self.dock_row + econ::N - 1) % econ::N,
+            KeyCode::Down | KeyCode::Char('j') => self.dock_row = (self.dock_row + 1) % econ::N,
+            KeyCode::Right | KeyCode::Char('b') | KeyCode::Char('B') | KeyCode::Char('+') => {
+                let want = if let KeyCode::Char(c) = k.code { n(c) } else if many { 10 } else { 1 };
+                let g = self.dock_row;
+                let got = self.world.buy(g, want);
+                self.dock_note = Some(match got {
+                    0 if self.world.cargo_room() == 0 => "The hold is full.".into(),
+                    0 => "You can't buy that here now.".into(),
+                    _ => format!("Bought {got} {}.", econ::GOODS[g].name.to_lowercase()),
+                });
+                if got > 0 {
+                    self.world.cues.push(crate::sim::cue::Cue::Target);
+                }
+            }
+            KeyCode::Left | KeyCode::Char('s') | KeyCode::Char('S') | KeyCode::Char('-') => {
+                let want = if let KeyCode::Char(c) = k.code { n(c) } else if many { 10 } else { 1 };
+                let g = self.dock_row;
+                let sold = self.world.sell(g, want);
+                self.dock_note = Some(if sold == 0 { "None of that in the hold.".into() } else { format!("Sold {sold} {}.", econ::GOODS[g].name.to_lowercase()) });
+                if sold > 0 {
+                    self.world.cues.push(crate::sim::cue::Cue::Target);
+                }
+            }
+            KeyCode::Char('r') | KeyCode::Char('R') => {
+                let cost = self.world.repair_cost();
+                self.dock_note = Some(if cost == 0 {
+                    "Nothing to repair.".into()
+                } else if self.world.repair() {
+                    "The dock crews patched you up.".into()
+                } else {
+                    "No repairs possible.".into()
+                });
+            }
+            KeyCode::Char('f') | KeyCode::Char('F') => self.save(),
+            KeyCode::Enter | KeyCode::Char('l') | KeyCode::Char('L') => {
+                self.world.launch();
+                self.screen = Screen::Flight;
+            }
+            KeyCode::Esc => self.ask_quit = true,
+            _ => {}
+        }
+    }
+}
