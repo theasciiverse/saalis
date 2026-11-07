@@ -25,8 +25,10 @@ pub struct App {
     pub map_sel: usize,
     /// the highlighted good at the exchange
     pub dock_row: usize,
-    /// the dock's tab: 0 exchange, 1 missions, 2 bar
+    /// the dock's tab: 0 exchange, 1 missions, 2 bar, 3 shipyard
     pub dock_tab: usize,
+    /// the highlighted line in the shipyard
+    pub yard_row: usize,
     /// the highlighted offer on the mission board
     pub job_row: usize,
     /// a line of news at the dock: what was bought, saved, repaired
@@ -43,7 +45,7 @@ pub struct App {
 impl App {
     pub fn new(world: World, screen: Screen, demo: bool) -> App {
         let saved = save::read().map(|s| save::describe(&s));
-        App { world, screen, map_sector: false, map_sel: 0, dock_row: 0, dock_tab: 0, job_row: 0, dock_note: None, saved, demo, ask_quit: false, hailing: None }
+        App { world, screen, map_sector: false, map_sel: 0, dock_row: 0, dock_tab: 0, yard_row: 0, job_row: 0, dock_note: None, saved, demo, ask_quit: false, hailing: None }
     }
 
     /// Whether keys go to a menu rather than to flight.
@@ -158,6 +160,24 @@ impl App {
         self.job_row = self.job_row.min(self.world.offers.len().saturating_sub(1));
     }
 
+    fn yard_key(&mut self, k: KeyEvent) {
+        let shop = self.world.shop();
+        let n = shop.len();
+        match k.code {
+            KeyCode::Up | KeyCode::Char('w') | KeyCode::Char('k') if n > 0 => self.yard_row = (self.yard_row + n - 1) % n,
+            KeyCode::Down | KeyCode::Char('s') | KeyCode::Char('j') if n > 0 => self.yard_row = (self.yard_row + 1) % n,
+            KeyCode::Char('b') | KeyCode::Char('B') | KeyCode::Right => {
+                if let Some(o) = shop.get(self.yard_row) {
+                    self.dock_note = Some(match self.world.buy_item(o.item) {
+                        Ok(s) | Err(s) => s,
+                    });
+                }
+            }
+            _ => {}
+        }
+        self.yard_row = self.yard_row.min(self.world.shop().len().saturating_sub(1));
+    }
+
     fn bar_key(&mut self, k: KeyEvent) {
         if matches!(k.code, KeyCode::Char('a') | KeyCode::Char('A')) {
             self.dock_note = Some(match self.world.accept_fixer() {
@@ -220,16 +240,17 @@ impl App {
     fn dock_key(&mut self, k: KeyEvent) {
         match k.code {
             KeyCode::Tab => {
-                self.dock_tab = (self.dock_tab + 1) % 3;
+                self.dock_tab = (self.dock_tab + 1) % 4;
                 return;
             }
             KeyCode::BackTab => {
-                self.dock_tab = (self.dock_tab + 2) % 3;
+                self.dock_tab = (self.dock_tab + 3) % 4;
                 return;
             }
             KeyCode::Char('r') | KeyCode::Char('R') | KeyCode::Char('f') | KeyCode::Char('F') | KeyCode::Enter | KeyCode::Esc => {}
             _ if self.dock_tab == 1 => return self.board_key(k),
             _ if self.dock_tab == 2 => return self.bar_key(k),
+            _ if self.dock_tab == 3 => return self.yard_key(k),
             _ => {}
         }
         let many = k.modifiers.contains(KeyModifiers::SHIFT);

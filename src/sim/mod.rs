@@ -10,6 +10,7 @@ pub mod faction;
 pub mod mission;
 pub mod rng;
 pub mod save;
+pub mod shipyard;
 pub mod sector;
 pub mod ship;
 pub mod v2;
@@ -97,6 +98,7 @@ pub struct Rock {
 pub struct Station {
     pub name: &'static str,
     pub kind: BaseKind,
+    pub black_market: bool,
     pub pos: V2,
     pub radius: f32,
     /// its market's index in `World::markets`
@@ -266,7 +268,7 @@ impl World {
             .bases
             .iter()
             .enumerate()
-            .map(|(i, b)| Station { name: b.name, kind: b.kind, pos: b.pos, radius: b.radius, market: all.iter().position(|&x| x == (r, i)).unwrap_or(0) })
+            .map(|(i, b)| Station { name: b.name, kind: b.kind, black_market: b.black_market, pos: b.pos, radius: b.radius, market: all.iter().position(|&x| x == (r, i)).unwrap_or(0) })
             .collect();
         self.rocks = sector::rocks(self.seed, r, &self.sector).into_iter().map(|k| Rock { pos: k.pos, radius: k.radius, seed: k.seed }).collect();
         self.ships.retain(|s| s.id == PLAYER);
@@ -335,7 +337,7 @@ impl World {
     }
 
     pub fn cargo_room(&self) -> u32 {
-        self.ships.first().map_or(0, |s| s.class.cargo).saturating_sub(self.cargo_used())
+        self.ships.first().map_or(0, |s| s.cargo_cap()).saturating_sub(self.cargo_used())
     }
 
     /// Day and time, for the HUD.
@@ -659,8 +661,8 @@ impl World {
             p.pos = pos;
             p.vel = V2::ZERO;
             p.set_speed = 0.0;
-            p.shields = [p.class.shield; 4];
-            p.energy = p.class.energy;
+            p.shields = [p.max_shield(); 4];
+            p.energy = p.max_energy();
             p.fuel = p.class.fuel;
         }
         self.ships.retain(|s| s.id == PLAYER);
@@ -756,7 +758,7 @@ impl World {
     /// What repairing armour and hull costs here.
     pub fn repair_cost(&self) -> u32 {
         let Some(p) = self.ships.first() else { return 0 };
-        let armour: f32 = p.class.armour.iter().zip(p.armour).map(|(m, a)| m - a).sum();
+        let armour: f32 = p.max_armour().iter().zip(p.armour).map(|(m, a)| m - a).sum();
         (armour * 12.0 + (p.class.hull - p.hull) * 20.0).round() as u32
     }
 
@@ -770,7 +772,8 @@ impl World {
         let paid = (cost as f32 * k).round() as u32;
         self.credits -= paid.min(self.credits);
         if let Some(p) = self.player_mut() {
-            for (a, m) in p.armour.iter_mut().zip(p.class.armour) {
+            let max = p.max_armour();
+            for (a, m) in p.armour.iter_mut().zip(max) {
                 *a += (m - *a) * k;
             }
             p.hull += (p.class.hull - p.hull) * k;
@@ -1024,11 +1027,11 @@ impl World {
             }
             if it.fire {
                 if let Some(g) = s.ready_gun() {
-                    let gun = s.class.guns[g];
+                    let gun = s.kit.guns[g];
                     s.cooldown[g] = gun.refire;
                     s.energy -= gun.energy;
-                    s.next_gun = (g + 1) % s.class.guns.len();
-                    let n = s.class.guns.len() as f32;
+                    s.next_gun = (g + 1) % s.kit.guns.len();
+                    let n = s.kit.guns.len() as f32;
                     let side = if n > 1.0 { (g as f32 / (n - 1.0) - 0.5) * s.class.radius } else { 0.0 };
                     let fwd = s.forward();
                     self.shots.push(Shot {
@@ -1045,7 +1048,7 @@ impl World {
                     } else if near {
                         self.cues.push(Cue::EnemyGun);
                     }
-                } else if s.id == PLAYER && s.energy < s.class.guns[0].energy && self.phase_t > 0.2 {
+                } else if s.id == PLAYER && s.kit.guns.first().is_some_and(|g| s.energy < g.energy) && self.phase_t > 0.2 {
                     self.cues.push(Cue::Empty);
                 }
             }

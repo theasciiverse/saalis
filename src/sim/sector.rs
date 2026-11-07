@@ -29,6 +29,16 @@ pub enum BaseKind {
 }
 
 impl BaseKind {
+    /// Sells hulls.
+    pub fn shipyard(self) -> bool {
+        matches!(self, BaseKind::Hub | BaseKind::Customs | BaseKind::Refinery)
+    }
+
+    /// Fits upgrades (every base but the farm and the clinic).
+    pub fn outfitter(self) -> bool {
+        !matches!(self, BaseKind::Farm | BaseKind::Clinic)
+    }
+
     pub fn name(self) -> &'static str {
         match self {
             BaseKind::Hub => "trade hub",
@@ -45,6 +55,8 @@ impl BaseKind {
 pub struct BaseDef {
     pub name: &'static str,
     pub kind: BaseKind,
+    /// trades in contraband under the counter and fits hidden compartments
+    pub black_market: bool,
     /// position in the region, metres
     pub pos: V2,
     pub radius: f32,
@@ -73,7 +85,8 @@ pub struct Sector {
 }
 
 fn base(name: &'static str, kind: BaseKind, x: f32, y: f32, radius: f32) -> BaseDef {
-    BaseDef { name, kind, pos: v2(x, y), radius }
+    let black_market = matches!(name, "Vaski Works" | "Halla Refinery");
+    BaseDef { name, kind, black_market, pos: v2(x, y), radius }
 }
 
 impl Sector {

@@ -14,7 +14,7 @@
 use super::canvas::Canvas;
 use super::palette::{self as pal, rgb, Rgb};
 use super::view::View;
-use crate::sim::ship::{Class, Ship, Side, Size, AHMA, HAAHKA, KARHU, KARPPA, KOTKA};
+use crate::sim::ship::{Class, Ship, Side, Size, AHMA, HAAHKA, HAUKKA, KARHU, KARPPA, KOTKA, KUIKKA, LOKKI};
 use ratatui::buffer::Buffer;
 use ratatui::style::{Color, Modifier, Style};
 
@@ -50,6 +50,12 @@ pub fn glyph_of(c: &Class) -> char {
         'A'
     } else if std::ptr::eq(c, &HAAHKA) {
         'O'
+    } else if std::ptr::eq(c, &KUIKKA) {
+        'Y'
+    } else if std::ptr::eq(c, &LOKKI) {
+        'U'
+    } else if std::ptr::eq(c, &HAUKKA) {
+        'W'
     } else {
         '#'
     }
@@ -151,7 +157,7 @@ mod tests {
 
     #[test]
     fn every_hull_has_its_own_glyph() {
-        let g: Vec<char> = [&crate::sim::ship::TIIRA, &KARPPA, &AHMA, &KARHU, &KOTKA, &HAAHKA].iter().map(|c| glyph_of(c)).collect();
+        let g: Vec<char> = [&crate::sim::ship::TIIRA, &KARPPA, &AHMA, &KARHU, &KOTKA, &HAAHKA, &KUIKKA, &LOKKI, &HAUKKA].iter().map(|c| glyph_of(c)).collect();
         let mut u = g.clone();
         u.dedup();
         assert_eq!(g.len(), u.len());

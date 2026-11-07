@@ -83,13 +83,13 @@ pub fn top(buf: &mut Buffer, area: Rect, w: &World) {
         }
     };
     let mut r1 = vec![label("SHIELD ")];
-    facing(&mut r1, p.shields, [c.shield; 4], true);
+    facing(&mut r1, p.shields, [p.max_shield(); 4], true);
     r1.push(label(" ENERGY "));
-    r1.extend(bar(p.energy / c.energy, if wide { 12 } else { 8 }, rgb(pal::ENERGY)));
+    r1.extend(bar(p.energy / p.max_energy(), if wide { 12 } else { 8 }, rgb(pal::ENERGY)));
     r1.push(label("  HULL "));
     r1.extend(bar(p.hull / c.hull, if wide { 10 } else { 6 }, pal::ramp(&pal::GAUGE, p.hull / c.hull)));
     let mut r2 = vec![label("ARMOUR ")];
-    facing(&mut r2, p.armour, c.armour, false);
+    facing(&mut r2, p.armour, p.max_armour(), false);
     r2.push(label(" SPEED "));
     let spd = if p.alive { p.speed() } else { 0.0 };
     r2.push(Span::styled(format!("{:>3}", spd.round() as i32), Style::default().fg(if p.burning { rgb(pal::BURN) } else { pal::TEXT })));
@@ -107,13 +107,13 @@ pub fn bottom(buf: &mut Buffer, area: Rect, w: &World, note: Option<&str>) {
     block.render(area, buf);
     let mut left = vec![label("GUNS ")];
     if let Some(p) = w.ships.first() {
-        for (g, gun) in p.class.guns.iter().enumerate() {
+        for (g, gun) in p.guns().iter().enumerate() {
             let ready = p.alive && p.cooldown[g] <= 0.0 && p.energy >= gun.energy;
             left.push(Span::styled(if ready { "●" } else { "○" }, Style::default().fg(if ready { rgb(pal::ENERGY) } else { pal::DIM })));
         }
     }
     left.push(Span::raw("  "));
-    let max = w.ships.first().map_or(0, |p| p.class.cargo);
+    let max = w.ships.first().map_or(0, |p| p.cargo_cap());
     let tally = format!("{} cr  HOLD {}/{}  KILLS {}", w.credits, w.cargo_used(), max, w.kills);
     let mut right = Vec::new();
     if let Some(n) = note {
@@ -253,8 +253,8 @@ pub fn target(buf: &mut Buffer, area: Rect, w: &World) {
         v
     };
     let info: [Vec<Span<'static>>; 4] = [
-        facing_row("SHD ", t.shields, [t.class.shield; 4], Some(pal::SHIELD)),
-        facing_row("ARM ", t.armour, t.class.armour, None),
+        facing_row("SHD ", t.shields, [t.max_shield(); 4], Some(pal::SHIELD)),
+        facing_row("ARM ", t.armour, t.max_armour(), None),
         {
             let mut v = vec![label("HULL ")];
             v.extend(bar(t.hull_frac(), 6, wire));

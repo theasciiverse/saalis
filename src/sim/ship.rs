@@ -66,6 +66,10 @@ pub struct Gun {
     pub range: f32,
 }
 
+/// Guns a shipyard sells, with their price per mount.
+pub const PLASMA: Gun = Gun { name: "plasma gun", damage: 17.0, energy: 11.0, refire: 0.5, speed: 780.0, range: 1000.0 };
+pub const SHOP_GUNS: [(Gun, u32); 3] = [(LASER, 600), (DRIVER, 1500), (PLASMA, 3800)];
+
 pub const LASER: Gun = Gun { name: "laser", damage: 6.0, energy: 3.0, refire: 0.22, speed: 1100.0, range: 1300.0 };
 pub const DRIVER: Gun = Gun { name: "mass driver", damage: 10.0, energy: 5.5, refire: 0.34, speed: 850.0, range: 1100.0 };
 
@@ -195,6 +199,88 @@ pub static KARHU: Class = Class {
     cargo: 0,
 };
 
+pub static KUIKKA: Class = Class {
+    name: "Kuikka",
+    role: "medium trader",
+    size: Size::Medium,
+    max_speed: 250.0,
+    burner_speed: 470.0,
+    accel: 190.0,
+    turn_rate: 2.2,
+    energy: 120.0,
+    recharge: 22.0,
+    shield: 26.0,
+    shield_regen: 4.0,
+    armour: [22.0, 18.0, 18.0, 18.0],
+    hull: 60.0,
+    fuel: 6.0,
+    guns: &[LASER, LASER],
+    radius: 36.0,
+    bounty: 0,
+    cargo: 70,
+};
+
+pub static LOKKI: Class = Class {
+    name: "Lokki",
+    role: "bulk hauler",
+    size: Size::Heavy,
+    max_speed: 200.0,
+    burner_speed: 360.0,
+    accel: 120.0,
+    turn_rate: 1.5,
+    energy: 140.0,
+    recharge: 24.0,
+    shield: 30.0,
+    shield_regen: 4.0,
+    armour: [28.0, 26.0, 26.0, 26.0],
+    hull: 90.0,
+    fuel: 5.0,
+    guns: &[LASER, LASER],
+    radius: 46.0,
+    bounty: 0,
+    cargo: 150,
+};
+
+pub static HAUKKA: Class = Class {
+    name: "Haukka",
+    role: "heavy fighter",
+    size: Size::Medium,
+    max_speed: 300.0,
+    burner_speed: 600.0,
+    accel: 260.0,
+    turn_rate: 2.7,
+    energy: 160.0,
+    recharge: 32.0,
+    shield: 30.0,
+    shield_regen: 5.0,
+    armour: [26.0, 20.0, 22.0, 22.0],
+    hull: 60.0,
+    fuel: 7.0,
+    guns: &[DRIVER, LASER, LASER, DRIVER],
+    radius: 34.0,
+    bounty: 0,
+    cargo: 25,
+};
+
+/// Hulls a shipyard sells the player, with prices; a trade-in fetches 60%.
+pub static PLAYER_HULLS: [(&Class, u32); 4] = [(&TIIRA, 6000), (&KUIKKA, 14000), (&LOKKI, 22000), (&HAUKKA, 30000)];
+
+/// A player hull by name, for loading a save.
+pub fn hull_named(name: &str) -> Option<&'static Class> {
+    PLAYER_HULLS.iter().map(|h| h.0).find(|c| c.name == name)
+}
+
+/// Which hulls carry a missile launcher and a rear turret mount.
+pub fn mounts(c: &Class) -> (bool, bool) {
+    match c.name {
+        "Tiira" => (true, false),
+        "Kuikka" => (true, true),
+        "Lokki" => (false, true),
+        "Haukka" => (true, true),
+        _ => (false, false),
+    }
+}
+
 pub static KOTKA: Class = Class {
     name: "Kotka",
     role: "patrol fighter",
@@ -269,10 +355,66 @@ pub enum Struck {
     Destroyed,
 }
 
+/// What a ship carries beyond its bare hull: the shipyard's work. Grades
+/// run 1 (as built) to 3.
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct Kit {
+    #[serde(with = "gun_names")]
+    pub guns: Vec<Gun>,
+    pub armour_grade: u8,
+    pub shield_grade: u8,
+    pub engine_grade: u8,
+    /// half as much hold again
+    pub cargo_ext: bool,
+    /// units of hold hidden from customs
+    pub hidden: u32,
+    /// 0 none .. 3: the chance a second of breaking a missile's lock
+    pub ecm: u8,
+    pub launcher: bool,
+    pub dumb: u32,
+    pub seekers: u32,
+    /// a rear turret that fires on its own
+    pub turret: bool,
+}
+
+/// Guns are saved by name.
+mod gun_names {
+    use super::{Gun, DRIVER, LASER, PLASMA};
+    use serde::{Deserialize, Deserializer, Serializer};
+
+    pub fn serialize<S: Serializer>(guns: &[Gun], s: S) -> Result<S::Ok, S::Error> {
+        s.collect_seq(guns.iter().map(|g| g.name))
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<Gun>, D::Error> {
+        let names = Vec::<String>::deserialize(d)?;
+        Ok(names.iter().filter_map(|n| [LASER, DRIVER, PLASMA].into_iter().find(|g| g.name == n)).collect())
+    }
+}
+
+impl Kit {
+    pub fn stock(c: &Class) -> Kit {
+        Kit {
+            guns: c.guns.to_vec(),
+            armour_grade: 1,
+            shield_grade: 1,
+            engine_grade: 1,
+            cargo_ext: false,
+            hidden: 0,
+            ecm: 0,
+            launcher: false,
+            dumb: 0,
+            seekers: 0,
+            turret: false,
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Ship {
     pub id: u32,
     pub class: &'static Class,
+    pub kit: Kit,
     pub side: Side,
     /// whose ship it is (the player's ship counts as the Reach's own)
     pub faction: Faction,
@@ -301,6 +443,7 @@ impl Ship {
         Ship {
             id,
             class,
+            kit: Kit::stock(class),
             side,
             faction: if side == Side::Pirate { Faction::Pirates } else { Faction::Coop },
             callsign: callsign.into(),
@@ -319,6 +462,44 @@ impl Ship {
             hit_flash: [9.0; 4],
             alive: true,
         }
+    }
+
+    pub fn guns(&self) -> &[Gun] {
+        &self.kit.guns
+    }
+
+    pub fn max_shield(&self) -> f32 {
+        self.class.shield * (1.0 + 0.4 * (self.kit.shield_grade.max(1) - 1) as f32)
+    }
+
+    pub fn max_armour(&self) -> [f32; 4] {
+        self.class.armour.map(|a| a * self.kit.armour_grade.max(1) as f32)
+    }
+
+    pub fn max_energy(&self) -> f32 {
+        self.class.energy * (1.0 + 0.3 * (self.kit.engine_grade.max(1) - 1) as f32)
+    }
+
+    fn recharge(&self) -> f32 {
+        self.class.recharge * (1.0 + 0.3 * (self.kit.engine_grade.max(1) - 1) as f32)
+    }
+
+    pub fn cargo_cap(&self) -> u32 {
+        if self.kit.cargo_ext { self.class.cargo * 3 / 2 } else { self.class.cargo }
+    }
+
+    /// Refits: new kit, everything topped up to its new limits.
+    pub fn refit(&mut self, kit: Kit) {
+        let frac: Vec<f32> = (0..4).map(|i| self.armour[i] / self.max_armour()[i]).collect();
+        self.kit = kit;
+        let max = self.max_armour();
+        for i in 0..4 {
+            self.armour[i] = max[i] * frac[i];
+        }
+        self.shields = [self.max_shield(); 4];
+        self.energy = self.max_energy();
+        self.cooldown = vec![0.0; self.kit.guns.len()];
+        self.next_gun = 0;
     }
 
     pub fn forward(&self) -> V2 {
@@ -358,9 +539,10 @@ impl Ship {
         self.vel = self.vel.approach(self.forward() * target, accel * dt);
         self.pos += self.vel * dt;
         // energy recharges; the shields draw on it
-        self.energy = (self.energy + c.recharge * dt).min(c.energy);
+        let (max_e, max_s, regen) = (self.max_energy(), self.max_shield(), c.shield_regen * self.kit.shield_grade.max(1) as f32);
+        self.energy = (self.energy + self.recharge() * dt).min(max_e);
         for s in &mut self.shields {
-            let want = (c.shield - *s).min(c.shield_regen * dt).min(self.energy);
+            let want = (max_s - *s).min(regen * dt).min(self.energy);
             if want > 0.0 {
                 *s += want;
                 self.energy -= want;
@@ -378,8 +560,8 @@ impl Ship {
     /// The next gun ready to fire, if any and if there is energy for it:
     /// guns fire in turn, so a pair alternates.
     pub fn ready_gun(&self) -> Option<usize> {
-        let n = self.class.guns.len();
-        (0..n).map(|k| (self.next_gun + k) % n).find(|&g| self.cooldown[g] <= 0.0 && self.energy >= self.class.guns[g].energy)
+        let n = self.kit.guns.len();
+        (0..n).map(|k| (self.next_gun + k) % n).find(|&g| self.cooldown[g] <= 0.0 && self.energy >= self.kit.guns[g].energy)
     }
 
     /// Takes a blow of `damage` from the direction `from` (a heading).

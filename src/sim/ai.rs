@@ -168,7 +168,7 @@ pub fn think(brain: &mut Brain, me: &Ship, ships: &[Ship], obstacles: &[Obstacle
             }
         }
         Mode::Attack => {
-            let gun = me.class.guns[0];
+            let gun = me.guns()[0];
             let aim = lead(me.pos, me.vel, t.pos, t.vel, gun.speed) + brain.jitter;
             let want = (aim - me.pos).heading();
             it.turn = steer(me, want);

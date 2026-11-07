@@ -39,7 +39,7 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &App) {
     for row in BAY {
         lines.push(Line::from(Span::styled(row, Style::default().fg(pal::WIRE))));
     }
-    let max = w.ships.first().map_or(0, |p| p.class.cargo);
+    let max = w.ships.first().map_or(0, |p| p.cargo_cap());
     let cost = w.repair_cost();
     lines.extend([
         Line::from(""),
@@ -58,7 +58,7 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &App) {
 
     Paragraph::new(lines).render(inner, buf);
 
-    let tabs = ["exchange", "missions", "bar"];
+    let tabs = ["exchange", "missions", "bar", "shipyard"];
     let mut title = vec![Span::raw(" ")];
     for (i, t) in tabs.iter().enumerate() {
         let st = if i == app.dock_tab { Style::default().fg(pal::TEXT).add_modifier(Modifier::REVERSED) } else { Style::default().fg(pal::DIM) };
@@ -72,6 +72,7 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &App) {
     match app.dock_tab {
         1 => return board(buf, inner, app),
         2 => return bar(buf, inner, app),
+        3 => return yard(buf, inner, app),
         _ => {}
     }
     let m = &w.markets[base.market];
@@ -180,5 +181,53 @@ fn bar(buf: &mut Buffer, area: Rect, app: &App) {
         None => rows.push(Line::from(Span::styled("Quiet tonight. Nobody's buying.", dim))),
     }
     note(&mut rows, app);
+    Paragraph::new(rows).render(area, buf);
+}
+
+fn yard(buf: &mut Buffer, area: Rect, app: &App) {
+    let w = &app.world;
+    let dim = Style::default().fg(pal::DIM);
+    let text = Style::default().fg(pal::TEXT);
+    let shop = w.shop();
+    let width = area.width as usize;
+    let mut rows = vec![];
+    if let Some(p) = w.ships.first() {
+        let k = &p.kit;
+        rows.push(Line::from(vec![
+            Span::styled(format!("{} ", p.class.name), Style::default().fg(pal::rgb(pal::PLAYER)).add_modifier(Modifier::BOLD)),
+            Span::styled(format!("hold {} · armour {} · shields {} · power {} · ECM {}", p.cargo_cap(), k.armour_grade, k.shield_grade, k.engine_grade, k.ecm), dim),
+        ]));
+        let mut extra = Vec::new();
+        if k.launcher {
+            extra.push(format!("missiles {} dumb, {} seeking", k.dumb, k.seekers));
+        }
+        if k.turret {
+            extra.push("rear turret".into());
+        }
+        if k.hidden > 0 {
+            extra.push(format!("{} hidden units", k.hidden));
+        }
+        rows.push(Line::from(Span::styled(if extra.is_empty() { " ".into() } else { extra.join(" · ") }, dim)));
+    }
+    // the shop is long: news goes at the top, where it is seen
+    rows.push(Line::from(Span::styled(app.dock_note.clone().unwrap_or_default(), Style::default().fg(pal::TARGET))));
+    if shop.is_empty() {
+        rows.push(Line::from(Span::styled("No shipyard or outfitter here.", dim)));
+    }
+    for (i, o) in shop.iter().enumerate() {
+        let price = if o.price == 0 { "—".to_string() } else { format!("{} cr", o.price) };
+        let room = width.saturating_sub(12);
+        let name: String = o.name.chars().take(room).collect();
+        let mut st = if o.ok { text } else { dim };
+        if i == app.yard_row {
+            st = st.add_modifier(Modifier::REVERSED);
+        }
+        rows.push(Line::from(vec![Span::styled(format!("{name:<room$}"), st), Span::styled(format!("{price:>11}"), if o.ok { text } else { dim })]));
+    }
+    if let Some(o) = shop.get(app.yard_row) {
+        rows.push(Line::from(""));
+        rows.push(Line::from(Span::styled(o.note.clone(), dim)));
+    }
+    rows.push(Line::from(Span::styled("↑↓ choose · B buy · Enter launch", dim)));
     Paragraph::new(rows).render(area, buf);
 }

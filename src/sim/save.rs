@@ -10,7 +10,7 @@ use super::{Phase, World, PLAYER};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-const FORMAT: u32 = 3;
+const FORMAT: u32 = 4;
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct Save {
@@ -22,6 +22,8 @@ pub struct Save {
     pub credits: u32,
     pub cargo: [u32; econ::N],
     pub paid: [u32; econ::N],
+    pub hull_class: String,
+    pub kit: super::ship::Kit,
     pub armour: [f32; 4],
     pub hull: f32,
     pub kills: u32,
@@ -68,6 +70,8 @@ impl World {
             credits: self.credits,
             cargo: self.cargo,
             paid: self.paid,
+            hull_class: p.class.name.to_string(),
+            kit: p.kit.clone(),
             armour: p.armour,
             hull: p.hull,
             kills: self.kills,
@@ -106,7 +110,9 @@ impl World {
         w.members = s.members;
         w.rating = s.rating;
         w.next_mission = s.next_mission;
-        let mut p = Ship::new(PLAYER, &ship::TIIRA, Side::Player, "you", w.bases[s.base].pos, 0.0);
+        let class = ship::hull_named(&s.hull_class)?;
+        let mut p = Ship::new(PLAYER, class, Side::Player, "you", w.bases[s.base].pos, 0.0);
+        p.refit(s.kit);
         p.armour = s.armour;
         p.hull = s.hull.max(1.0);
         p.vel = super::v2::V2::ZERO;
