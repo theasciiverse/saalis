@@ -111,6 +111,11 @@ The Northern Reach, *a section of the asteroid belt*. Working reading
 - **Commodities** from belt life: ice, volatiles, metals, rare earths,
   hydroponic food, air, medicine and drive parts. Contraband: stims,
   unlicensed AI cores, stolen claims.
+- **The unknown is a found artifact** (David, 2026-11-07), not an alien
+  species or visitor. Something was found out in the Reach: what it is,
+  who holds it and what it does are still open. It is the seed of the
+  story (1.0) and can show up earlier in rumours, fixers' talk and
+  contraband.
 - All names of rocks, bases, people and ships are our own, with a
   Finnish/Nordic flavour where it fits. Real large bodies (Ceres, Vesta,
   Pallas, Hygiea) may appear under their own names.
@@ -167,8 +172,6 @@ RNG.
 ## Open questions (David's to decide)
 
 - [ ] Confirm the reading of the Northern Reach above
-- [ ] The "quiet alien" of the original pitch: in a real Solar System, a
-      found artifact or an unexplained visitor rather than a species?
 - [ ] Are the inner planets ever visited, or only off-map powers?
 - [ ] On-foot and interior art (half-block floor plans or classic ASCII)
 - [ ] Quest format: own declarative format, or an embedded language
