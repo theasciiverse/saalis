@@ -24,9 +24,11 @@ pub const STAR: [Color; 3] = [Color::Rgb(54, 60, 88), Color::Rgb(110, 118, 160),
 
 /// The player's colours: ice and cyan.
 pub const PLAYER: Rgb = (190, 236, 255);
-pub const PLAYER_SHOT: Color = Color::Rgb(170, 240, 255);
-/// Reserved for pirate fire: nothing else uses it.
-pub const PIRATE_SHOT: Color = Color::Rgb(255, 60, 70);
+/// Gunfire has colours of its own, so a shot never reads as a ship's nose
+/// line (David, 2026-11-07): lime for yours, magenta for theirs. Nothing
+/// else uses either.
+pub const PLAYER_SHOT: Rgb = (160, 255, 110);
+pub const PIRATE_SHOT: Rgb = (255, 70, 210);
 pub const PIRATE: Rgb = (240, 80, 80);
 /// The selected target's brackets and arrow.
 pub const TARGET: Color = Color::Rgb(255, 196, 80);

@@ -43,12 +43,13 @@ pub fn draw(buf: &mut Buffer, view: &View, w: &World) {
     }
     for s in &w.shots {
         let col = if s.side == Side::Player { pal::PLAYER_SHOT } else { pal::PIRATE_SHOT };
-        // a short streak behind the head
-        let tail = s.pos - s.vel * 0.025;
-        for k in 0..4 {
-            let p = tail + (s.pos - tail) * (k as f32 / 3.0);
+        // a short streak, dim at the tail; the head is drawn last so its
+        // colour wins the cell
+        let tail = s.pos - s.vel * 0.02;
+        for k in 0..3 {
+            let p = tail + (s.pos - tail) * (k as f32 / 2.0);
             let (x, y) = view.dot(p);
-            c.dot(x, y, col);
+            c.dot(x, y, rgb(scale(col, 0.45 + 0.275 * k as f32)));
         }
     }
     for s in &w.sparks {
