@@ -29,6 +29,7 @@ const USAGE: &str = "saalis: flight, combat and trade in the Northern Reach
 
   saalis            title screen
   saalis --play     straight into a new game
+  saalis --board    a new game, clamped onto a disabled raider (to try boarding)
   saalis --demo     the game plays itself (any key ends it)
   saalis --seed N   the same region and waves each time
   saalis --mute     no sound
@@ -39,6 +40,7 @@ Terminals without key releases: SAALIS_INPUT=latch makes turning and fire toggle
 
 struct Args {
     play: bool,
+    board: bool,
     demo: bool,
     mute: bool,
     seed: Option<u64>,
@@ -46,7 +48,7 @@ struct Args {
 
 fn args() -> Option<Args> {
     let a: Vec<String> = std::env::args().skip(1).collect();
-    let mut out = Args { play: false, demo: false, mute: false, seed: None };
+    let mut out = Args { play: false, board: false, demo: false, mute: false, seed: None };
     let mut i = 0;
     while i < a.len() {
         match a[i].as_str() {
@@ -59,6 +61,10 @@ fn args() -> Option<Args> {
                 return None;
             }
             "--play" => out.play = true,
+            "--board" => {
+                out.play = true;
+                out.board = true;
+            }
             "--demo" => out.demo = true,
             "--mute" => out.mute = true,
             "--seed" => {
@@ -141,6 +147,10 @@ fn run(terminal: &mut DefaultTerminal, kitty: bool, args: &Args, mut audio: audi
     let mut app = App::new(World::demo(seed()), screen, args.demo);
     if args.play {
         app.new_game(seed());
+    }
+    if args.board {
+        app.world.practice_boarding();
+        app.follow();
     }
     // behind the title the game flies itself, as in the demo
     let mut pilot = Brain::new(0.85, 0.0);

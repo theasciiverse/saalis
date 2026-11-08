@@ -52,7 +52,9 @@ TOML data (see `CLAUDE.md`).
 
 - [x] Walkable bases (0.6.0, built 2026-11-08): classic ASCII decks, the
       counters open the old dock panels, the crowd wanders
-- [ ] On-foot combat and boarding disabled ships
+- [x] On-foot combat and boarding disabled ships (0.7.0, built 2026-11-08):
+      ships can be knocked out, boarded with L, the crew fought turn by turn
+      on a ship deck, the hold and console looted
 - [ ] Quest format and loader
 
 ## 1.0.0

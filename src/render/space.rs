@@ -82,7 +82,10 @@ pub fn draw(buf: &mut Buffer, view: &View, w: &World) {
     let crowd = glyphs::Detail::crowded(seen.len());
     for s in &seen {
         let full = s.id == crate::sim::PLAYER || w.target == Some(s.id);
-        glyphs::trails(&mut c, view, s, if full { glyphs::Detail::FULL } else { crowd }, w.fleeing(s.id), w.time);
+        // a wreck has no drive to show and no nose worth reading
+        if !s.disabled {
+            glyphs::trails(&mut c, view, s, if full { glyphs::Detail::FULL } else { crowd }, w.fleeing(s.id), w.time);
+        }
     }
     c.blit(buf, a, pal::SPACE);
 

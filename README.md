@@ -69,6 +69,17 @@ buys, S or ← sells (Shift for ten). On the boards and in the bar A takes a
 job, and 1 or 2 joins a guild. Esc steps away from a counter. F saves;
 every landing saves the game, and C on the title continues it.
 
+Boarding: a ship's last hit sometimes leaves it dead in space instead of
+blowing it apart (it shows grey, and the target box says so). Target it,
+come alongside slowly and press L to clamp on and board. Aboard, the crew
+fight you a turn at a time: F fires at the nearest one in sight (marked),
+walking into someone hits them, M uses a medkit. Some give up. Walk into
+crates and the cockpit's console to take what they hold, and back into
+the hatch (`<`) to cast off; the wreck is scuttled behind you. Boarding a
+lawful ship is piracy. Sidearms, vests and medkits are sold at
+outfitters; a landing heals you. `--board` starts a new game already
+clamped onto a disabled raider.
+
 Gamepad: the left stick turns and throttles, A fires, B burns, the right
 bumper picks the next target, the left bumper the nearest, Start pauses.
 

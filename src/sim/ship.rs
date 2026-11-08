@@ -441,6 +441,8 @@ pub struct Ship {
     pub turret_cd: f32,
     pub launch_cd: f32,
     pub alive: bool,
+    /// knocked out: dead in space, drifting, and open to boarding
+    pub disabled: bool,
 }
 
 impl Ship {
@@ -468,6 +470,7 @@ impl Ship {
             turret_cd: 0.0,
             launch_cd: 0.0,
             alive: true,
+            disabled: false,
         }
     }
 

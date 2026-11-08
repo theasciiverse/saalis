@@ -5,23 +5,40 @@ line of Elite, Wing Commander: Privateer and above all **Ascii Sector**
 (Laserbrain Studios), rebuilt for the terminal in Rust + Ratatui with a
 universe of our own.
 
-**Status (2026-11-08):** 0.6.0 is built: walkable bases.
-- Every release up to 0.6.0 is in place: flight and combat, regions and
-  trade, factions and missions, the shipyard, the living belt, and
-  walking the bases on foot.
+**Status (2026-11-08):** 0.7.0 is built: on-foot combat and boarding.
+- Every release up to 0.7.0 is in place: flight and combat, regions and
+  trade, factions and missions, the shipyard, the living belt, walking
+  the bases on foot, and boarding.
 - **On foot** (`sim/deck.rs`, `render/deck.rs`): landing puts you in the
   hangar beside your ship. Each base is a deck: the hangar, then a
   corridor with rooms above and below (exchange, guild office, bar, the
-  base's own hall, and a shipyard or outfitter where there is one), laid
-  out from the base and the day. Walking into the broker, a terminal, the
-  yard master or the fixer opens the old dock panel for it (Esc steps
-  back); the mechanic repairs; your ship launches; patrons and the
-  bartender talk (rumours, price tips). No time passes on foot, and where
-  you stand is not saved (a loaded game starts in the hangar).
+  base's own hall, and a shipyard, outfitter or dispensary where there is
+  one), laid out from the base and the day. Walking into the broker, a
+  terminal, the yard master or the fixer opens the old dock panel for it
+  (Esc steps back); the mechanic repairs; your ship launches; patrons and
+  the bartender talk. No time passes on foot, and where you stand is not
+  saved.
+- **Boarding** (0.7): a ship's last hit disables it instead, 35% of the
+  time (`DISABLE_CHANCE`). It counts as the kill then (bounty, standing,
+  missions); scuttling it later pays nothing more. L with a disabled
+  target within 250 m and 40 m/s boards it (`Phase::Boarding`); a lawful
+  ship costs 10 standing. The ship's deck (`Deck::board`): airlock,
+  hold, quarters on medium and heavy hulls, cockpit. The crew
+  (`deck::Fight`) are raiders, spacers or patrol officers by side; they
+  stand until they see you or hear a shot, then shoot when in range and
+  line of sight, or close in. Spacers give up readily, raiders rarely,
+  officers never. Hits land on a body part (head doubles, limbs three
+  quarters). Crates hold the ship's cargo (raiders often carry stims and
+  AI cores), the console its cash. The hatch casts off and scuttles the
+  wreck. Dying aboard ends the game ("killed aboard").
+- **You on foot** (`sim/body.rs`): 30 health, a sidearm (pistol,
+  carbine, scattergun), a vest, medkits; sold at outfitters (medkits at
+  clinics too), saved with the game, healed in full at every landing.
+- **`--board`** starts a new game clamped onto a disabled raider, for
+  trying it.
 - **Catalog drafts** are in `asciiverse/saalis.toml` and `.md`. Putting
   them in `hub`, pushing and tagging are David's call.
-- **Next:** 0.7.0, on-foot combat and boarding disabled ships, on the same
-  decks. 0.8.0, quests in Lua (see Decisions).
+- **Next:** 0.8.0, quests in Lua (see Decisions).
 - **Tested:** unit tests and tmux runs. No person has played it yet, so
   prices and balance are untuned.
 - **Known simplification:** a market keeps the law of the region's
@@ -74,7 +91,9 @@ Braille, so stars and the radar show as boxes there).
   - `mission.rs`: guilds, jobs and the boards. A board is seeded by the
     base and the day.
   - `v2.rs`: vectors. Heading 0 is up and angles grow clockwise.
-  - `deck.rs`: on foot: a base's deck (rooms, people, walking, bumping).
+  - `deck.rs`: on foot: a base's deck (rooms, people, walking, bumping)
+    and a boarded ship's (crew, turn-based fighting, loot).
+  - `body.rs`: you on foot: health, sidearms, vests, medkits.
   - `rng.rs`, `cue.rs`.
 - `src/render/`: drawing.
   - `view.rs`: the camera, with world metres to cells, pixels and dots.
@@ -114,6 +133,8 @@ Braille, so stars and the radar show as boxes there).
     player's Kuikka (`Y`), Lokki (`U`) and Haukka (`W`)
   - the plasma gun; stims and AI cores, and which factions ban them
     (`econ::illegal`); all shipyard prices
+  - the sidearms and vests and their numbers (`body.rs`), the crew's
+    lines and the mayday calls
   - the deck's room names (market hall, ore hall, smelter, greenhouse,
     ward, bonded store, inspection bay) and the patrons' and mechanic's
     lines

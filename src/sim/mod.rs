@@ -4,6 +4,7 @@
 //! in `--demo`.
 
 pub mod ai;
+pub mod body;
 pub mod cue;
 pub mod deck;
 pub mod econ;
@@ -144,8 +145,10 @@ pub enum Phase {
     Flying,
     /// landed at base `n` of the current region
     Docked(usize),
-    /// the player's ship is gone
+    /// the player's ship is gone (or the player, aboard another)
     Lost,
+    /// clamped onto disabled ship `id`, on foot aboard it
+    Boarding(u32),
 }
 
 /// A place in the current region to fly to.
@@ -189,6 +192,10 @@ pub struct World {
     pub offers: Vec<Mission>,
     /// the fixer in this base's bar, if any: name, line, job
     pub fixer: Option<(String, String, Mission)>,
+    /// you on foot: health, sidearm, vest, medkits
+    pub body: body::Body,
+    /// the ship you were killed aboard, if that is how it ended
+    pub lost_aboard: Option<String>,
     pub next_mission: u32,
     /// what the player paid per unit, on average, for what is in the hold
     pub paid: [u32; econ::N],
@@ -226,6 +233,14 @@ const ARRIVALS: [&str; 6] = [
     "Nobody flies the high orbits for free.",
 ];
 const RUNNING: [&str; 4] = ["Not worth it. I'm out.", "Breaking off! Breaking off!", "You'll keep.", "Too hot. Going dark."];
+/// The chance a ship's last hit disables it instead of destroying it.
+pub const DISABLE_CHANCE: f32 = 0.35;
+/// How close (between hulls) and how slow (relative) you must be to board.
+pub const BOARD_RANGE: f32 = 250.0;
+pub const BOARD_SPEED: f32 = 40.0;
+
+const MAYDAY: [&str; 3] = ["Mayday, mayday! Drives are gone!", "We're dead in space! Hold your fire!", "Reactor's scrammed. We're drifting."];
+
 const KILLED: [&str; 3] = ["Bounty logged: {}.", "Confirmed. One {} less.", "Good kill. {} down."];
 
 impl World {
@@ -262,6 +277,8 @@ impl World {
             rating: [0; 2],
             offers: Vec::new(),
             fixer: None,
+            body: body::Body::default(),
+            lost_aboard: None,
             next_mission: 0,
             paid: [0; econ::N],
             ships: Vec::new(),
@@ -348,6 +365,7 @@ impl World {
 
     pub fn hostile_to_player(&self, s: &Ship) -> bool {
         s.alive
+            && !s.disabled
             && s.id != PLAYER
             && s.side != Side::Trader
             && (s.side == Side::Pirate || self.angry.contains(&s.id) || self.standing.of(s.faction) <= faction::HOSTILE)
@@ -784,6 +802,10 @@ impl World {
         if self.phase != Phase::Flying {
             return;
         }
+        // L beside a disabled target boards it
+        if self.try_board() {
+            return;
+        }
         let Some(b) = self.nearest_base() else {
             self.say("Lane beacon", "No base in this region.", None);
             return;
@@ -818,6 +840,8 @@ impl World {
             p.energy = p.max_energy();
             p.fuel = p.class.fuel;
         }
+        // a night ashore heals you
+        self.body.hp = body::MAX_HP;
         self.ships.retain(|s| s.id == PLAYER);
         self.brains.clear();
         self.shots.clear();
@@ -862,6 +886,132 @@ impl World {
         self.pass_hours(0.25);
         self.say_traffic("Clear of the dock. Fly safe.");
         log::info!("launched from {}", self.bases[b].name);
+    }
+
+    // --- boarding ----------------------------------------------------
+
+    /// L with a disabled ship targeted: clamp on and board it, if close and
+    /// slow enough. Returns whether L was about boarding.
+    pub fn try_board(&mut self) -> bool {
+        let Some(t) = self.target.and_then(|id| self.ship(id)).filter(|s| s.disabled).cloned() else { return false };
+        let Some(p) = self.player() else { return false };
+        let gap = (t.pos - p.pos).len() - t.class.radius - p.class.radius;
+        let rel = (t.vel - p.vel).len();
+        if gap > BOARD_RANGE {
+            self.say_note("Boarding", &format!("Close within {} m of the wreck to clamp on.", BOARD_RANGE as u32));
+        } else if rel > BOARD_SPEED {
+            self.say_note("Boarding", "Match its drift first (M).");
+        } else if self.hostiles_near(2500.0) {
+            self.say_note("Boarding", "Not with hostiles about.");
+        } else {
+            self.phase = Phase::Boarding(t.id);
+            self.phase_t = 0.0;
+            self.autopilot = false;
+            if let Some(p) = self.player_mut() {
+                p.vel = t.vel;
+                p.set_speed = 0.0;
+            }
+            // boarding a lawful ship is piracy, whoever knocked it out
+            if t.side != Side::Pirate {
+                self.standing.shift(t.faction, -10);
+            }
+            log::info!("boarding {} ({})", t.callsign, t.class.name);
+        }
+        true
+    }
+
+    /// What is aboard ship `id`, for the deck to lay out.
+    pub fn boarding(&mut self, id: u32) -> Option<deck::Boarding> {
+        let s = self.ship(id)?.clone();
+        let size = match s.class.size {
+            ship::Size::Light => 0,
+            ship::Size::Medium => 1,
+            ship::Size::Heavy => 2,
+        };
+        let crew_kind = match s.side {
+            Side::Pirate => 0,
+            Side::Patrol => 2,
+            _ => 1,
+        };
+        let crew = 1 + size + self.rng.below(2) as u8 * size.min(1);
+        let lots = match (s.side, size) {
+            (Side::Trader, _) => 2 + self.rng.below(3),
+            (_, 0) => 1,
+            _ => 1 + self.rng.below(2),
+        };
+        let mut cargo = Vec::new();
+        for _ in 0..lots {
+            // raiders carry what they took, and what they sell on the side
+            let g = if s.side == Side::Pirate && self.rng.chance(0.5) { 10 + self.rng.below(2) as usize } else { self.rng.below(10) as usize };
+            cargo.push((g, 3 + self.rng.below(10)));
+        }
+        let credits = match s.side {
+            Side::Pirate => 150 + self.rng.below(550),
+            Side::Trader => 50 + self.rng.below(250),
+            _ => self.rng.below(100),
+        };
+        Some(deck::Boarding { size, faction: s.faction, crew_kind, crew, cargo, credits })
+    }
+
+    /// Takes up to `n` of good `g` into the hold; returns how many fitted.
+    pub fn take_cargo(&mut self, g: usize, n: u32) -> u32 {
+        let got = n.min(self.cargo_room());
+        if got > 0 {
+            let held = self.cargo[g];
+            // free goods bring the average paid down
+            self.paid[g] = ((self.paid[g] * held) as f32 / (held + got) as f32).round() as u32;
+            self.cargo[g] += got;
+            log::info!("took {got} {} aboard", econ::GOODS[g].name);
+        }
+        got
+    }
+
+    /// Back aboard your own ship: cast off, and the wreck is scuttled.
+    pub fn leave_boarded(&mut self) {
+        let Phase::Boarding(id) = self.phase else { return };
+        self.phase = Phase::Flying;
+        self.phase_t = 0.0;
+        if let Some(i) = self.ships.iter().position(|s| s.id == id) {
+            let (pos, vel) = (self.ships[i].pos, self.ships[i].vel);
+            if let Some(p) = self.player_mut() {
+                let away = (p.pos - pos).norm();
+                p.pos = pos + away * 400.0;
+                p.vel = vel + away * 60.0;
+            }
+            self.ships[i].alive = false;
+            self.destroyed(i, PLAYER);
+        }
+        self.say_note("Boarding", "You cast off. Behind you the wreck's reactor lets go.");
+        log::info!("left the boarded ship");
+    }
+
+    /// `--board`: launched, with a raider knocked out alongside and the
+    /// clamps already on.
+    pub fn practice_boarding(&mut self) {
+        self.launch();
+        self.spawn_encounter();
+        self.ships.truncate(2);
+        let Some(me) = self.player().map(|p| p.pos) else { return };
+        if self.ships.len() < 2 {
+            return;
+        }
+        self.ships[1].pos = me + v2(0.0, -150.0);
+        self.ships[1].vel = V2::ZERO;
+        self.ships[0].vel = V2::ZERO;
+        while !self.knock_out(1, 0) {}
+        self.target = Some(self.ships[1].id);
+        self.comms.clear();
+        self.try_board();
+    }
+
+    /// Killed on foot aboard someone else's ship.
+    pub fn die_aboard(&mut self) {
+        let Phase::Boarding(id) = self.phase else { return };
+        self.lost_aboard = Some(self.ship(id).map_or("a wreck".into(), |s| s.class.name.to_string()));
+        self.phase = Phase::Lost;
+        self.phase_t = 0.0;
+        self.cues.push(Cue::PlayerLost);
+        log::info!("killed aboard {:?}", self.lost_aboard);
     }
 
     // --- trade and the dock ------------------------------------------
@@ -1139,7 +1289,7 @@ impl World {
         for c in &mut self.comms {
             c.age += dt;
         }
-        if let Phase::Docked(_) = self.phase {
+        if let Phase::Docked(_) | Phase::Boarding(_) = self.phase {
             return;
         }
         // a game minute a second while flying
@@ -1181,6 +1331,13 @@ impl World {
             let near = player_pos.is_some_and(|p| (self.ships[i].pos - p).len() < EARSHOT);
             let s = &mut self.ships[i];
             if !s.alive || (s.id == PLAYER && self.autopilot) {
+                continue;
+            }
+            // a wreck drifts, slowing, turning over
+            if s.disabled {
+                s.pos += s.vel * dt;
+                s.vel = s.vel * (1.0 - 0.3 * dt);
+                s.heading += 0.4 * dt;
                 continue;
             }
             if s.fly(it, dt) && s.id == PLAYER {
@@ -1332,7 +1489,7 @@ impl World {
     /// Rear turrets: a laser at the nearest enemy behind, within 900 m.
     fn turrets(&mut self) {
         let mut shots = Vec::new();
-        for s in self.ships.iter().filter(|s| s.alive && s.kit.turret && s.turret_cd <= 0.0) {
+        for s in self.ships.iter().filter(|s| s.alive && !s.disabled && s.kit.turret && s.turret_cd <= 0.0) {
             let enemy = self
                 .ships
                 .iter()
@@ -1455,9 +1612,37 @@ impl World {
                 }
             }
         }
-        if struck == Struck::Destroyed {
+        if struck == Struck::Destroyed && !self.knock_out(i, sh.owner) {
             self.destroyed(i, sh.owner);
         }
+    }
+
+    /// Sometimes a ship's last hit leaves it dead in space, not blown apart:
+    /// it drifts, can't fight, and can be boarded. Returns whether it did.
+    /// It counts as a kill now; blowing it up later pays nothing more.
+    pub fn knock_out(&mut self, i: usize, by: u32) -> bool {
+        let s = &self.ships[i];
+        if s.id == PLAYER || s.disabled || !self.rng.chance(DISABLE_CHANCE) {
+            return false;
+        }
+        let s = &mut self.ships[i];
+        s.alive = true;
+        s.disabled = true;
+        s.hull = 1.0;
+        s.shields = [0.0; 4];
+        s.energy = 0.0;
+        s.set_speed = 0.0;
+        s.burning = false;
+        let s = s.clone();
+        self.brains.remove(&s.id);
+        self.angry.remove(&s.id);
+        log::info!("disabled {} ({}) by {by}", s.callsign, s.class.name);
+        self.spray(s.pos, s.vel * 0.3, 18, SparkKind::Smoke);
+        self.cues.push(Cue::Kill);
+        let line = MAYDAY[self.rng.below(MAYDAY.len() as u32) as usize];
+        self.say(s.callsign.clone(), line, Some(s.side));
+        self.credit(&s, by);
+        true
     }
 
     fn destroyed(&mut self, i: usize, by: u32) {
@@ -1476,6 +1661,14 @@ impl World {
             return;
         }
         self.cues.push(if big { Cue::BigKill } else { Cue::Kill });
+        // a wreck already counted when it was knocked out
+        if !s.disabled {
+            self.credit(&s, by);
+        }
+    }
+
+    /// The bounty, standing and mission credit for a ship taken out.
+    fn credit(&mut self, s: &Ship, by: u32) {
         if by == PLAYER && s.side != Side::Pirate {
             self.standing.shift(s.faction, -25);
             log::info!("player destroyed a {:?} ship", s.faction);
@@ -1786,7 +1979,7 @@ impl World {
 /// `World::fights` without borrowing the world: whether `a` would fight `b`.
 fn fights_of(standing: &Standing, angry: &HashSet<u32>, a: &Ship, b: &Ship) -> bool {
     let against_player = |s: &Ship| s.alive && s.id != PLAYER && s.side != Side::Trader && (s.side == Side::Pirate || angry.contains(&s.id) || standing.of(s.faction) <= faction::HOSTILE);
-    if !a.alive || !b.alive || a.id == b.id {
+    if !a.alive || !b.alive || a.disabled || b.disabled || a.id == b.id {
         return false;
     }
     if a.id == PLAYER {
@@ -2022,6 +2215,65 @@ mod tests {
         assert_eq!(w.credits, START_CREDITS - Guild::Traders.fee());
         assert!(w.offers.len() > n);
         assert!(w.join(Guild::Traders).is_err());
+    }
+
+    #[test]
+    fn a_knocked_out_pirate_counts_once_and_can_be_boarded_and_left() {
+        let mut w = World::new(3);
+        w.launch();
+        w.encounter_t = f32::INFINITY;
+        w.busy = false;
+        w.spawn_encounter();
+        w.ships.truncate(2);
+        let id = w.ships[1].id;
+        assert_eq!(w.ships[1].side, Side::Pirate);
+        let me = w.ships[0].pos;
+        w.ships[1].pos = me + v2(0.0, -300.0);
+        w.ships[1].vel = V2::ZERO;
+        w.ships[0].vel = V2::ZERO;
+        w.ships[0].set_speed = 0.0;
+        let credits = w.credits;
+        // knocked out until the dice say so
+        while !w.knock_out(1, PLAYER) {}
+        assert!(w.ships[1].disabled && w.ships[1].alive);
+        assert_eq!(w.kills, 1);
+        let paid = w.credits - credits;
+        assert!(paid > 0, "the bounty is paid on knocking out");
+        assert!(w.hostiles().next().is_none(), "a wreck is no threat");
+        fly(&mut w, 1.0);
+        assert!(w.ship(id).is_some(), "it drifts on; nobody shoots it");
+        // too far: L says so and does not board
+        w.ships[1].pos = me + v2(0.0, -3000.0);
+        w.target = Some(id);
+        w.land();
+        assert_eq!(w.phase, Phase::Flying);
+        w.ships[1].pos = w.ships[0].pos + v2(0.0, -150.0);
+        w.ships[1].vel = w.ships[0].vel;
+        w.land();
+        assert_eq!(w.phase, Phase::Boarding(id));
+        let b = w.boarding(id).unwrap();
+        assert_eq!(b.crew_kind, 0, "raiders");
+        let room = w.cargo_room();
+        assert_eq!(w.take_cargo(0, room + 5), room, "only what fits");
+        w.leave_boarded();
+        assert_eq!(w.phase, Phase::Flying);
+        assert!(w.ship(id).is_none(), "scuttled");
+        assert_eq!(w.kills, 1, "and not counted twice");
+        assert_eq!(w.credits - credits, paid);
+    }
+
+    #[test]
+    fn dying_aboard_ends_the_game() {
+        let mut w = World::new(3);
+        w.launch();
+        w.encounter_t = f32::INFINITY;
+        w.spawn_encounter();
+        let id = w.ships[1].id;
+        w.ships[1].disabled = true;
+        w.phase = Phase::Boarding(id);
+        w.die_aboard();
+        assert_eq!(w.phase, Phase::Lost);
+        assert!(w.lost_aboard.is_some());
     }
 
     #[test]

@@ -177,8 +177,12 @@ fn comms(buf: &mut Buffer, field: Rect, app: &App) {
 }
 
 fn lost(buf: &mut Buffer, field: Rect, w: &crate::sim::World, demo: bool, saved: bool) {
+    let head = match &w.lost_aboard {
+        Some(name) => format!("KILLED ABOARD THE {}", name.to_uppercase()),
+        None => "SHIP LOST".into(),
+    };
     let mut lines = vec![
-        Line::from(Span::styled("SHIP LOST", Style::default().fg(pal::TARGET).add_modifier(Modifier::BOLD))),
+        Line::from(Span::styled(head, Style::default().fg(pal::TARGET).add_modifier(Modifier::BOLD))),
         Line::from(""),
         Line::from(format!("{} · {} kills · {} cr", w.date(), w.kills, w.credits)),
     ];
@@ -211,7 +215,7 @@ const KEYS: [(&str, &str); 22] = [
     ("F8", "sound on, off"),
     ("F1", "these keys"),
     ("Esc", "quit"),
-    ("on foot", "walk into people, counters, your ship · Enter"),
+    ("on foot", "walk into things to use them · aboard: F fire, M medkit"),
     ("pad", "stick flies · A fires · B burns · RB target"),
 ];
 
@@ -287,6 +291,14 @@ mod tests {
         docked.go_aboard();
         for (cw, ch) in [(20, 6), (79, 23), (80, 24), (100, 30), (160, 50), (300, 90)] {
             frame_of(&docked, cw, ch);
+        }
+        let mut w = World::new(5);
+        w.practice_boarding();
+        let mut boarded = app(w, Screen::Flight);
+        boarded.follow();
+        assert!(boarded.deck.as_ref().is_some_and(|d| d.boarding));
+        for (cw, ch) in [(20, 6), (79, 23), (80, 24), (100, 30), (160, 50), (300, 90)] {
+            frame_of(&boarded, cw, ch);
         }
     }
 

@@ -244,7 +244,7 @@ pub fn target(buf: &mut Buffer, area: Rect, w: &World) {
         Line::from(Span::styled(t.callsign.clone(), Style::default().fg(pal::TARGET).add_modifier(Modifier::BOLD))),
         Line::from(vec![
             Span::styled(format!("{} · ", t.faction.name()), Style::default().fg(rgb(pal::faction(t.faction)))),
-            label(if w.hostile_to_player(t) { "hostile" } else { t.class.role }),
+            label(if t.disabled { "disabled" } else if w.hostile_to_player(t) { "hostile" } else { t.class.role }),
         ]),
     ];
     let schem = glyphs::schematic(t.class);
@@ -286,6 +286,9 @@ pub fn target(buf: &mut Buffer, area: Rect, w: &World) {
             l.push(Span::styled("  running", Style::default().fg(pal::DIM)));
         }
         lines.push(Line::from(l));
+        if t.disabled {
+            lines.push(Line::from(Span::styled("dead in space · L boards it", Style::default().fg(pal::TARGET))));
+        }
     }
     Paragraph::new(lines).render(inner, buf);
 }

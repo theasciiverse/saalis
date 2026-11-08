@@ -3,6 +3,7 @@
 //! rear turret, and (under the counter, at black markets) hidden
 //! compartments. Prices are placeholders, to tune by play.
 
+use super::body;
 use super::ship::{self, Kit, Ship};
 use super::{Phase, World, PLAYER};
 
@@ -20,6 +21,11 @@ pub enum Item {
     Seekers,
     Turret,
     Hidden,
+    /// a hand weapon, `body::ARMS[i]`
+    Arm(usize),
+    /// a vest, `body::VESTS[i]`
+    Vest(usize),
+    Medkit,
 }
 
 /// One line in the shipyard: what, its price now, whether it can be had,
@@ -87,6 +93,21 @@ impl World {
                 add(Item::Turret, "rear turret".into(), (!k.turret).then_some(3500), true, "fires on its own at what follows you");
             }
         }
+        // for you, on foot
+        if base.kind.outfitter() {
+            let b = &self.body;
+            for (i, a) in body::ARMS.iter().enumerate().skip(1) {
+                let own = b.arm as usize == i;
+                add(Item::Arm(i), a.name.to_string(), (!own).then_some(a.price), true, &format!("on foot: {}-{} damage, {} paces", a.dmg.0, a.dmg.1, a.range));
+            }
+            for (i, v) in body::VESTS.iter().enumerate().skip(1) {
+                add(Item::Vest(i), v.0.to_string(), (b.vest < i as u8).then_some(v.2), true, &format!("on foot: takes {} off every hit", v.1));
+            }
+        }
+        if base.kind.outfitter() || base.kind == crate::sim::sector::BaseKind::Clinic {
+            let n = self.body.medkits;
+            add(Item::Medkit, format!("medkit ({n} carried)"), Some(body::MEDKIT_PRICE), n < body::MAX_MEDKITS, &format!("on foot: heals {}", body::MEDKIT_HEAL));
+        }
         if base.black_market {
             let cap = p.cargo_cap() / 4;
             add(Item::Hidden, format!("hidden compartment, 5 units ({} now)", k.hidden), Some(400), k.hidden + 5 <= cap, "customs won't see what's in it, mostly");
@@ -102,6 +123,17 @@ impl World {
         }
         if self.credits < o.price {
             return Err(format!("That's {} cr.", o.price));
+        }
+        match item {
+            Item::Arm(i) => self.body.arm = i as u8,
+            Item::Vest(i) => self.body.vest = i as u8,
+            Item::Medkit => self.body.medkits += 1,
+            _ => {}
+        }
+        if matches!(item, Item::Arm(_) | Item::Vest(_) | Item::Medkit) {
+            self.credits -= o.price;
+            log::info!("bought {:?} for {}", item, o.price);
+            return Ok(format!("Bought: {}.", o.name));
         }
         let cargo = self.cargo_used();
         let Some(p) = self.ships.iter_mut().find(|s| s.id == PLAYER) else { return Err("No ship.".into()) };
@@ -135,6 +167,7 @@ impl World {
             Item::Seekers => kit.seekers += 1,
             Item::Turret => kit.turret = true,
             Item::Hidden => kit.hidden += 5,
+            Item::Arm(_) | Item::Vest(_) | Item::Medkit => {}
         }
         // new armour plating arrives whole
         let armour_up = item == Item::Armour;
@@ -173,6 +206,21 @@ mod tests {
         assert!(w.buy_item(Item::Armour).is_err(), "grade 3 is the best");
         w.buy_item(Item::CargoExt).unwrap();
         assert_eq!(w.cargo_room(), 45);
+    }
+
+    #[test]
+    fn gear_for_on_foot_is_sold_with_the_fittings() {
+        let mut w = World::new(2);
+        w.credits = 10_000;
+        w.buy_item(Item::Arm(1)).unwrap();
+        assert_eq!(w.body.arm().name, "carbine");
+        assert!(w.buy_item(Item::Arm(1)).is_err(), "you have it");
+        w.buy_item(Item::Vest(2)).unwrap();
+        assert!(w.buy_item(Item::Vest(1)).is_err(), "no step down");
+        for _ in 0..4 {
+            w.buy_item(Item::Medkit).unwrap();
+        }
+        assert!(w.buy_item(Item::Medkit).is_err(), "five at most");
     }
 
     #[test]

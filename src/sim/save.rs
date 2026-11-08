@@ -36,6 +36,9 @@ pub struct Save {
     pub rating: [u32; 2],
     pub next_mission: u32,
     pub war: super::war::War,
+    /// you on foot (0.7; older saves get the starting kit)
+    #[serde(default)]
+    pub body: super::body::Body,
 }
 
 /// Where saves live: `SAALIS_DATA_DIR`, or the platform's data folder.
@@ -85,6 +88,7 @@ impl World {
             rating: self.rating,
             next_mission: self.next_mission,
             war: self.war.clone(),
+            body: self.body.clone(),
         })
     }
 
@@ -112,6 +116,7 @@ impl World {
         w.members = s.members;
         w.rating = s.rating;
         w.next_mission = s.next_mission;
+        w.body = s.body;
         if s.war.control.len() == w.sector.regions.len() {
             w.war = s.war;
         }

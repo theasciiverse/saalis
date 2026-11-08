@@ -120,7 +120,14 @@ pub fn glyph(buf: &mut Buffer, view: &View, s: &Ship, fleeing: bool) {
     let Some((x, y)) = view.cell(s.pos) else { return };
     let (hull, _) = colours(s);
     let flash = s.hit_flash.iter().cloned().fold(9.0f32, f32::min) < 0.1;
-    let col = if flash { Color::Rgb(255, 255, 255) } else { rgb(if fleeing { pal::scale(hull, 0.6) } else { hull }) };
+    let col = if flash {
+        Color::Rgb(255, 255, 255)
+    } else if s.disabled {
+        // a wreck: grey, its glyph blinking slowly
+        Color::Rgb(110, 110, 120)
+    } else {
+        rgb(if fleeing { pal::scale(hull, 0.6) } else { hull })
+    };
     let a = view.area;
     buf[(a.x + x, a.y + y)].set_char(glyph_of(s.class)).set_style(Style::default().fg(col).add_modifier(Modifier::BOLD));
 }

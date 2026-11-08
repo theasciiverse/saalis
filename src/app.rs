@@ -102,11 +102,23 @@ impl App {
                     self.save();
                 }
             }
+            Phase::Boarding(id) if !self.deck.as_ref().is_some_and(|d| d.boarding) => {
+                if let Some(b) = self.world.boarding(id) {
+                    let seed = self.world.seed ^ (id as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ self.world.clock.to_bits();
+                    self.deck = Some(Deck::board(&b, seed));
+                    self.screen = Screen::Base;
+                    self.dock_note = None;
+                    log::info!("on foot aboard ship {id}");
+                }
+            }
             Phase::Flying if matches!(self.screen, Screen::Base | Screen::Dock) => {
                 self.screen = Screen::Flight;
                 self.deck = None;
             }
-            Phase::Lost if matches!(self.screen, Screen::Map | Screen::Comms) => self.screen = Screen::Flight,
+            Phase::Lost if matches!(self.screen, Screen::Map | Screen::Comms | Screen::Base) => {
+                self.screen = Screen::Flight;
+                self.deck = None;
+            }
             _ => {}
         }
     }
@@ -177,23 +189,34 @@ impl App {
             _ => None,
         };
         let Some(deck) = self.deck.as_mut() else { return };
+        let body = &mut self.world.body;
+        let aboard = deck.boarding;
         if let Some((dx, dy)) = walk {
-            match deck.step(dx, dy) {
+            match deck.step(dx, dy, body) {
                 Step::Bump(u) => self.use_thing(u),
                 Step::Moved => self.dock_note = None,
-                Step::Blocked => {}
+                Step::Blocked | Step::Acted => {}
             }
-            return;
+        } else {
+            match k.code {
+                KeyCode::Enter | KeyCode::Char('e') | KeyCode::Char('E') | KeyCode::Char(' ') => match deck.nearby() {
+                    Some(u) => self.use_thing(u),
+                    None => self.dock_note = Some("Nothing here to use. Walk into someone to talk.".into()),
+                },
+                KeyCode::Char('.') | KeyCode::Char('5') => deck.turn(body),
+                KeyCode::Char('f') | KeyCode::Char('F') if aboard => {
+                    deck.fire(body);
+                }
+                KeyCode::Char('m') | KeyCode::Char('M') if aboard => {
+                    deck.heal(body);
+                }
+                KeyCode::Char('f') | KeyCode::Char('F') => self.save(),
+                KeyCode::Esc => self.ask_quit = true,
+                _ => {}
+            }
         }
-        match k.code {
-            KeyCode::Enter | KeyCode::Char('e') | KeyCode::Char('E') | KeyCode::Char(' ') => match deck.nearby() {
-                Some(u) => self.use_thing(u),
-                None => self.dock_note = Some("Nothing here to use. Walk into someone to talk.".into()),
-            },
-            KeyCode::Char('.') | KeyCode::Char('5') => deck.turn(),
-            KeyCode::Char('f') | KeyCode::Char('F') => self.save(),
-            KeyCode::Esc => self.ask_quit = true,
-            _ => {}
+        if aboard && self.world.body.hp <= 0 {
+            self.world.die_aboard();
         }
     }
 
@@ -211,6 +234,41 @@ impl App {
             Use::Fixer => counter(self, 2),
             Use::Service(Place::Yard) => counter(self, 3),
             Use::Service(_) => {}
+            Use::Attack(i) => {
+                // Enter beside someone fighting you: a blow at them
+                let Some(deck) = self.deck.as_mut() else { return };
+                let (dx, dy) = (deck.npcs[i].x - deck.you.0, deck.npcs[i].y - deck.you.1);
+                deck.step(dx.signum(), dy.signum(), &mut self.world.body);
+            }
+            Use::Loot(x, y) => {
+                let Some(deck) = self.deck.as_mut() else { return };
+                let Some(mut l) = deck.take_loot(x, y) else { return };
+                let mut said = Vec::new();
+                if l.credits > 0 {
+                    self.world.credits += l.credits;
+                    said.push(format!("{} cr from the console", l.credits));
+                    l.credits = 0;
+                }
+                if let Some((g, n)) = l.cargo {
+                    let got = self.world.take_cargo(g, n);
+                    let name = econ::GOODS[g].name.to_lowercase();
+                    if got > 0 {
+                        said.push(format!("{got} {name}"));
+                    }
+                    if got < n {
+                        said.push(format!("{} {name} left: your hold is full", n - got));
+                    }
+                    l.cargo = Some((g, n - got));
+                }
+                deck.leave_loot(x, y, l);
+                let line = if said.is_empty() { "Nothing worth taking.".to_string() } else { format!("You take {}.", said.join("; ")) };
+                deck.say(line);
+            }
+            Use::Leave => {
+                self.world.leave_boarded();
+                self.screen = Screen::Flight;
+                self.deck = None;
+            }
             Use::Launch => {
                 self.world.launch();
                 self.screen = Screen::Flight;
@@ -230,6 +288,7 @@ impl App {
                 let Some(n) = self.deck.as_ref().map(|d| d.npcs[i].clone()) else { return };
                 use crate::sim::deck::Who;
                 let line = match n.who {
+                    Who::Crew(_) => "Don't shoot! It's all in the hold. Take it.".into(),
                     Who::Barkeep => self.world.tip(),
                     Who::Guard => "Holds get checked here. Keep yours clean.".into(),
                     _ if n.faction == crate::sim::faction::Faction::Pirates => "Mind your own hold, pilot.".into(),
@@ -390,5 +449,56 @@ impl App {
             KeyCode::Char('f') | KeyCode::Char('F') => self.save(),
             _ => {}
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ratatui::crossterm::event::KeyCode;
+
+    fn app(w: World) -> App {
+        App { world: w, screen: Screen::Flight, map_sector: false, map_sel: 0, dock_row: 0, dock_tab: 0, yard_row: 0, job_row: 0, dock_note: None, saved: None, demo: false, ask_quit: false, hailing: None, deck: None }
+    }
+
+    #[test]
+    fn a_boarding_runs_from_the_clamps_to_the_loot_and_back_to_flight() {
+        let mut a = app(World::new(4));
+        a.world.practice_boarding();
+        a.follow();
+        assert_eq!(a.screen, Screen::Base);
+        assert!(a.deck.as_ref().is_some_and(|d| d.boarding));
+        // the crew already dealt with
+        let deck = a.deck.as_mut().unwrap();
+        deck.npcs.clear();
+        let loot: Vec<(i32, i32)> = deck.loot.iter().map(|l| l.0).collect();
+        let (credits, held) = (a.world.credits, a.world.cargo_used());
+        for (x, y) in loot {
+            // stand beside it and press Enter
+            let deck = a.deck.as_mut().unwrap();
+            deck.you = [(x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)].into_iter().find(|&(px, py)| deck.tile(px, py) == crate::sim::deck::Tile::Floor).unwrap();
+            a.menu_key(KeyEvent::from(KeyCode::Enter));
+        }
+        assert!(a.world.credits > credits, "the console's cash");
+        assert!(a.world.cargo_used() > held, "the crates' cargo");
+        // back to the hatch, and through it
+        let deck = a.deck.as_mut().unwrap();
+        deck.you = (1, deck.h / 2);
+        a.menu_key(KeyEvent::from(KeyCode::Char('h')));
+        assert_eq!(a.world.phase, Phase::Flying);
+        assert_eq!(a.screen, Screen::Flight);
+        assert!(a.deck.is_none());
+    }
+
+    #[test]
+    fn a_fight_lost_aboard_ends_the_game() {
+        let mut a = app(World::new(4));
+        a.world.practice_boarding();
+        a.follow();
+        a.world.body.hp = 0;
+        a.menu_key(KeyEvent::from(KeyCode::Char('.')));
+        assert_eq!(a.world.phase, Phase::Lost);
+        a.follow();
+        assert_eq!(a.screen, Screen::Flight, "the card shows over the field");
     }
 }
