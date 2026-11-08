@@ -327,7 +327,8 @@ fn run(terminal: &mut DefaultTerminal, kitty: bool, args: &Args, mut audio: audi
         }
         if snap.elapsed() >= SNAPSHOT {
             snap = Instant::now();
-            ::log::debug!("snapshot {}", app.world.snapshot());
+            let foot = app.deck.as_ref().map(|d| format!(" on_foot={:?} room={}", d.you, d.here().map_or("corridor", |r| r.name))).unwrap_or_default();
+            ::log::debug!("snapshot {}{foot}", app.world.snapshot());
         }
     }
     ::log::info!("quit {}", app.world.snapshot());

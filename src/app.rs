@@ -1,6 +1,7 @@
-//! The screens around the simulation: title, flight, the nav map and the
-//! dock, and the keys that drive the map and the dock.
+//! The screens around the simulation: title, flight, the nav map, the base
+//! on foot and its counters, and the keys that drive them.
 
+use crate::sim::deck::{Deck, Place, Spec, Step, Use};
 use crate::sim::econ;
 use crate::sim::save;
 use crate::sim::{Nav, Phase, World};
@@ -11,6 +12,9 @@ pub enum Screen {
     Title,
     Flight,
     Map,
+    /// on foot, walking the base's deck
+    Base,
+    /// at a counter on the base: the exchange, the boards, the bar, the yard
     Dock,
     /// hailing a ship
     Comms,
@@ -40,22 +44,24 @@ pub struct App {
     pub ask_quit: bool,
     /// the ship being hailed
     pub hailing: Option<u32>,
+    /// the base's deck, while docked
+    pub deck: Option<Deck>,
 }
 
 impl App {
     pub fn new(world: World, screen: Screen, demo: bool) -> App {
         let saved = save::read().map(|s| save::describe(&s));
-        App { world, screen, map_sector: false, map_sel: 0, dock_row: 0, dock_tab: 0, yard_row: 0, job_row: 0, dock_note: None, saved, demo, ask_quit: false, hailing: None }
+        App { world, screen, map_sector: false, map_sel: 0, dock_row: 0, dock_tab: 0, yard_row: 0, job_row: 0, dock_note: None, saved, demo, ask_quit: false, hailing: None, deck: None }
     }
 
     /// Whether keys go to a menu rather than to flight.
     pub fn in_menu(&self) -> bool {
-        matches!(self.screen, Screen::Map | Screen::Dock | Screen::Comms)
+        matches!(self.screen, Screen::Map | Screen::Base | Screen::Dock | Screen::Comms)
     }
 
     pub fn new_game(&mut self, seed: u64) {
         self.world = World::new(seed);
-        self.screen = Screen::Dock;
+        self.go_aboard();
         self.dock_note = Some("Welcome to Routa. The Reach is yours to work.".into());
         log::info!("new game seed={seed}");
     }
@@ -65,7 +71,7 @@ impl App {
         match save::read().and_then(World::from_save) {
             Some(w) => {
                 self.world = w;
-                self.screen = Screen::Dock;
+                self.go_aboard();
                 self.dock_note = Some("Saved game loaded.".into());
                 log::info!("continue: {}", self.world.region_name());
                 true
@@ -88,18 +94,37 @@ impl App {
             return;
         }
         match self.world.phase {
-            Phase::Docked(_) if self.screen != Screen::Dock => {
-                self.screen = Screen::Dock;
+            Phase::Docked(_) if !matches!(self.screen, Screen::Base | Screen::Dock) => {
+                self.go_aboard();
                 self.dock_note = None;
                 // every landing is a save point
                 if !self.demo {
                     self.save();
                 }
             }
-            Phase::Flying if self.screen == Screen::Dock => self.screen = Screen::Flight,
+            Phase::Flying if matches!(self.screen, Screen::Base | Screen::Dock) => {
+                self.screen = Screen::Flight;
+                self.deck = None;
+            }
             Phase::Lost if matches!(self.screen, Screen::Map | Screen::Comms) => self.screen = Screen::Flight,
             _ => {}
         }
+    }
+
+    /// Steps off the ship onto the base's deck, by the hatch.
+    pub fn go_aboard(&mut self) {
+        let w = &self.world;
+        let Phase::Docked(b) = w.phase else { return };
+        let base = &w.bases[b];
+        let art = w.ships.first().map_or(&[][..], |p| crate::render::glyphs::schematic(p.class));
+        let ship = (art.iter().map(|l| l.chars().count()).max().unwrap_or(1) as i32, art.len() as i32);
+        let spec = Spec { kind: base.kind, owner: w.owner(), black_market: base.black_market, yard: !w.shop().is_empty(), fixer: w.fixer.is_some(), ship };
+        // the same base looks the same all day; the crowd changes daily
+        let day = (w.clock / 24.0) as u64;
+        let seed = w.seed ^ (b as u64 + 1).wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ day.wrapping_mul(0xD1B5_4A32_D192_ED03);
+        self.deck = Some(Deck::build(&spec, seed));
+        self.screen = Screen::Base;
+        log::info!("aboard {} on foot", base.name);
     }
 
     pub fn open_map(&mut self) {
@@ -130,9 +155,93 @@ impl App {
     pub fn menu_key(&mut self, k: KeyEvent) {
         match self.screen {
             Screen::Map => self.map_key(k),
+            Screen::Base => self.base_key(k),
             Screen::Dock => self.dock_key(k),
             Screen::Comms => self.comms_key(k),
             _ => {}
+        }
+    }
+
+    /// On foot: arrows, WASD, vi keys (with y u b n for diagonals) or the
+    /// numpad walk; walking into something uses it, as does Enter beside it.
+    fn base_key(&mut self, k: KeyEvent) {
+        let walk = match k.code {
+            KeyCode::Up | KeyCode::Char('w') | KeyCode::Char('k') | KeyCode::Char('8') => Some((0, -1)),
+            KeyCode::Down | KeyCode::Char('s') | KeyCode::Char('j') | KeyCode::Char('2') => Some((0, 1)),
+            KeyCode::Left | KeyCode::Char('a') | KeyCode::Char('h') | KeyCode::Char('4') => Some((-1, 0)),
+            KeyCode::Right | KeyCode::Char('d') | KeyCode::Char('l') | KeyCode::Char('6') => Some((1, 0)),
+            KeyCode::Char('y') | KeyCode::Char('7') | KeyCode::Home => Some((-1, -1)),
+            KeyCode::Char('u') | KeyCode::Char('9') | KeyCode::PageUp => Some((1, -1)),
+            KeyCode::Char('b') | KeyCode::Char('1') | KeyCode::End => Some((-1, 1)),
+            KeyCode::Char('n') | KeyCode::Char('3') | KeyCode::PageDown => Some((1, 1)),
+            _ => None,
+        };
+        let Some(deck) = self.deck.as_mut() else { return };
+        if let Some((dx, dy)) = walk {
+            match deck.step(dx, dy) {
+                Step::Bump(u) => self.use_thing(u),
+                Step::Moved => self.dock_note = None,
+                Step::Blocked => {}
+            }
+            return;
+        }
+        match k.code {
+            KeyCode::Enter | KeyCode::Char('e') | KeyCode::Char('E') | KeyCode::Char(' ') => match deck.nearby() {
+                Some(u) => self.use_thing(u),
+                None => self.dock_note = Some("Nothing here to use. Walk into someone to talk.".into()),
+            },
+            KeyCode::Char('.') | KeyCode::Char('5') => deck.turn(),
+            KeyCode::Char('f') | KeyCode::Char('F') => self.save(),
+            KeyCode::Esc => self.ask_quit = true,
+            _ => {}
+        }
+    }
+
+    /// Does what touching something on the deck does.
+    fn use_thing(&mut self, u: Use) {
+        log::info!("on foot: use {u:?}");
+        let counter = |app: &mut App, tab: usize| {
+            app.dock_tab = tab;
+            app.dock_note = None;
+            app.screen = Screen::Dock;
+        };
+        match u {
+            Use::Service(Place::Exchange) => counter(self, 0),
+            Use::Service(Place::Office) => counter(self, 1),
+            Use::Fixer => counter(self, 2),
+            Use::Service(Place::Yard) => counter(self, 3),
+            Use::Service(_) => {}
+            Use::Launch => {
+                self.world.launch();
+                self.screen = Screen::Flight;
+                self.deck = None;
+            }
+            Use::Repair => {
+                let cost = self.world.repair_cost();
+                self.dock_note = Some(if cost == 0 {
+                    "\u{201c}She's sound. Nothing for me to do.\u{201d}".into()
+                } else if self.world.repair() {
+                    format!("The mechanic patches you up: {cost} cr.")
+                } else {
+                    format!("\u{201c}That's {cost} cr of work. Come back when you have it.\u{201d}")
+                });
+            }
+            Use::Talk(i) => {
+                let Some(n) = self.deck.as_ref().map(|d| d.npcs[i].clone()) else { return };
+                use crate::sim::deck::Who;
+                let line = match n.who {
+                    Who::Barkeep => self.world.tip(),
+                    Who::Guard => "Holds get checked here. Keep yours clean.".into(),
+                    _ if n.faction == crate::sim::faction::Faction::Pirates => "Mind your own hold, pilot.".into(),
+                    _ => self.world.rumour(),
+                };
+                let who = n.who.name();
+                let mut who = who.to_string();
+                if let Some(c) = who.get_mut(0..1) {
+                    c.make_ascii_uppercase();
+                }
+                self.dock_note = Some(format!("{who}: \u{201c}{line}\u{201d}"));
+            }
         }
     }
 
@@ -239,15 +348,13 @@ impl App {
 
     fn dock_key(&mut self, k: KeyEvent) {
         match k.code {
-            KeyCode::Tab => {
-                self.dock_tab = (self.dock_tab + 1) % 4;
+            // step back from the counter onto the deck
+            KeyCode::Esc | KeyCode::Enter => {
+                self.screen = Screen::Base;
+                self.dock_note = None;
                 return;
             }
-            KeyCode::BackTab => {
-                self.dock_tab = (self.dock_tab + 3) % 4;
-                return;
-            }
-            KeyCode::Char('r') | KeyCode::Char('R') | KeyCode::Char('f') | KeyCode::Char('F') | KeyCode::Enter | KeyCode::Esc => {}
+            KeyCode::Char('f') | KeyCode::Char('F') => {}
             _ if self.dock_tab == 1 => return self.board_key(k),
             _ if self.dock_tab == 2 => return self.bar_key(k),
             _ if self.dock_tab == 3 => return self.yard_key(k),
@@ -280,22 +387,7 @@ impl App {
                     self.world.cues.push(crate::sim::cue::Cue::Target);
                 }
             }
-            KeyCode::Char('r') | KeyCode::Char('R') => {
-                let cost = self.world.repair_cost();
-                self.dock_note = Some(if cost == 0 {
-                    "Nothing to repair.".into()
-                } else if self.world.repair() {
-                    "The dock crews patched you up.".into()
-                } else {
-                    "No repairs possible.".into()
-                });
-            }
             KeyCode::Char('f') | KeyCode::Char('F') => self.save(),
-            KeyCode::Enter | KeyCode::Char('l') | KeyCode::Char('L') => {
-                self.world.launch();
-                self.screen = Screen::Flight;
-            }
-            KeyCode::Esc => self.ask_quit = true,
             _ => {}
         }
     }

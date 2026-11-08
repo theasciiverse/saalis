@@ -1,5 +1,6 @@
-//! The dock: the base's name and services on the left, the commodity
-//! exchange on the right.
+//! At a counter on the base: the base and you on the left, the counter's
+//! service (the exchange, the mission boards, the bar, the yard) on the
+//! right. Walking about the base is `deck.rs`.
 
 use super::hud::frame;
 use super::palette as pal;
@@ -11,22 +12,13 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Clear, Paragraph, Widget};
 
-const SIDE_W: u16 = 30;
+pub const SIDE_W: u16 = 30;
 
-/// The docking bay, in box-drawing lines.
-const BAY: [&str; 5] = ["    ╭────────╮    ", "────┤ ▫ ▫ ▫▫ ├────", "    │  ╭──╮  │    ", "────┤  │  │  ├────", "    ╰──┴──┴──╯    "];
-
-pub fn draw(buf: &mut Buffer, area: Rect, app: &App) {
-    Clear.render(area, buf);
+/// The base and you: credits, hold, repairs and standing.
+pub fn side(buf: &mut Buffer, side: Rect, app: &App) {
     let w = &app.world;
     let Phase::Docked(b) = w.phase else { return };
     let base = &w.bases[b];
-    if area.width < SIDE_W + 40 {
-        return;
-    }
-    let side = Rect::new(area.x, area.y, SIDE_W, area.height);
-    let main = Rect::new(area.x + SIDE_W, area.y, area.width - SIDE_W, area.height);
-
     let block = frame("docked");
     let inner = block.inner(side);
     block.render(side, buf);
@@ -36,9 +28,6 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &App) {
         Line::from(Span::styled(format!("{} · {}", base.kind.name(), w.region_name()), dim)),
         Line::from(Span::styled(w.date(), dim)),
     ];
-    for row in BAY {
-        lines.push(Line::from(Span::styled(row, Style::default().fg(pal::WIRE))));
-    }
     let max = w.ships.first().map_or(0, |p| p.cargo_cap());
     let cost = w.repair_cost();
     lines.extend([
@@ -57,16 +46,20 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &App) {
     }
 
     Paragraph::new(lines).render(inner, buf);
+}
 
-    let tabs = ["exchange", "missions", "bar", "shipyard"];
-    let mut title = vec![Span::raw(" ")];
-    for (i, t) in tabs.iter().enumerate() {
-        let st = if i == app.dock_tab { Style::default().fg(pal::TEXT).add_modifier(Modifier::REVERSED) } else { Style::default().fg(pal::DIM) };
-        title.push(Span::styled(format!(" {t} "), st));
-        title.push(Span::raw(" "));
+pub fn draw(buf: &mut Buffer, area: Rect, app: &App) {
+    Clear.render(area, buf);
+    let w = &app.world;
+    let Phase::Docked(b) = w.phase else { return };
+    let base = &w.bases[b];
+    if area.width < SIDE_W + 40 {
+        return;
     }
-    title.push(Span::styled("Tab switches ", Style::default().fg(pal::TRACE)));
-    let block = frame("").title(Line::from(title));
+    let main = Rect::new(area.x + SIDE_W, area.y, area.width - SIDE_W, area.height);
+    side(buf, Rect::new(area.x, area.y, SIDE_W, area.height), app);
+    let name = ["exchange", "mission boards", "bar", if base.kind.shipyard() { "shipyard" } else { "outfitter" }][app.dock_tab.min(3)];
+    let block = frame(name);
     let inner = block.inner(main);
     block.render(main, buf);
     match app.dock_tab {
@@ -108,7 +101,7 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &App) {
     }
     rows.push(Line::from(""));
     rows.push(Line::from(Span::styled("↑↓ choose · → or B buy · ← or S sell · Shift: ten at a time", hdr)));
-    rows.push(Line::from(Span::styled("R repair · F save · Enter launch · Esc quit", hdr)));
+    rows.push(Line::from(Span::styled("F save · Esc step away", hdr)));
     note(&mut rows, app);
     Paragraph::new(rows).render(inner, buf);
 }
@@ -161,7 +154,7 @@ fn board(buf: &mut Buffer, area: Rect, app: &App) {
         let status = if w.members[g.index()] { format!("member, rating {}", w.rating[g.index()]) } else { format!("{} to join: press {}", g.fee(), k + 1) };
         rows.push(Line::from(vec![Span::styled(format!("{:<22}", g.name()), Style::default().fg(pal::rgb(pal::faction(g.faction())))), Span::styled(status, dim)]));
     }
-    rows.push(Line::from(Span::styled("↑↓ choose · A take the job · Enter launch", dim)));
+    rows.push(Line::from(Span::styled("↑↓ choose · A take the job · Esc step away", dim)));
     note(&mut rows, app);
     Paragraph::new(rows).render(area, buf);
 }
@@ -179,7 +172,7 @@ fn bar(buf: &mut Buffer, area: Rect, app: &App) {
             rows.push(Line::from(Span::styled(format!("The job: {}.", m.describe(&w.sector)), Style::default().fg(pal::TEXT))));
             rows.push(Line::from(Span::styled(format!("{} cr, done within {}.", m.pay, time_left(m.deadline, w.clock)), Style::default().fg(pal::TEXT))));
             rows.push(Line::from(""));
-            rows.push(Line::from(Span::styled("A take it · Tab back to the boards", dim)));
+            rows.push(Line::from(Span::styled("A take it · Esc step away", dim)));
         }
         None => rows.push(Line::from(Span::styled("Quiet tonight. Nobody's buying.", dim))),
     }
@@ -231,6 +224,6 @@ fn yard(buf: &mut Buffer, area: Rect, app: &App) {
         rows.push(Line::from(""));
         rows.push(Line::from(Span::styled(o.note.clone(), dim)));
     }
-    rows.push(Line::from(Span::styled("↑↓ choose · B buy · Enter launch", dim)));
+    rows.push(Line::from(Span::styled("↑↓ choose · B buy · Esc step away", dim)));
     Paragraph::new(rows).render(area, buf);
 }

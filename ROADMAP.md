@@ -50,7 +50,8 @@ Built 2026-11-07, all but the release itself.
 Decided 2026-11-08: on foot is classic ASCII; quests are Lua 5.4 (mlua) with
 TOML data (see `CLAUDE.md`).
 
-- [ ] Walkable bases
+- [x] Walkable bases (0.6.0, built 2026-11-08): classic ASCII decks, the
+      counters open the old dock panels, the crowd wanders
 - [ ] On-foot combat and boarding disabled ships
 - [ ] Quest format and loader
 

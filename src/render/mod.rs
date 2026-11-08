@@ -2,6 +2,7 @@
 //! them. Everything is centred in the terminal and follows a resize.
 
 pub mod canvas;
+pub mod deck;
 pub mod dock;
 pub mod glyphs;
 pub mod hud;
@@ -87,8 +88,14 @@ pub fn draw_buf(buf: &mut Buffer, area: Rect, ui: &Ui) {
     // the field and the right panel together, for the map and the dock
     let wide = Rect::new(l.field.x, l.field.y, l.field.width + l.radar.width, l.field.height);
     hud::top(buf, l.top, w);
-    hud::bottom(buf, l.bottom, w, ui.note);
-    if app.screen == Screen::Dock {
+    if app.screen == Screen::Base {
+        deck::bottom(buf, l.bottom, app);
+    } else {
+        hud::bottom(buf, l.bottom, w, ui.note);
+    }
+    if app.screen == Screen::Base {
+        deck::draw(buf, wide, app);
+    } else if app.screen == Screen::Dock {
         dock::draw(buf, wide, app);
     } else {
         // the camera leads a little in the direction of flight
@@ -204,7 +211,7 @@ const KEYS: [(&str, &str); 22] = [
     ("F8", "sound on, off"),
     ("F1", "these keys"),
     ("Esc", "quit"),
-    ("dock", "Tab: exchange, missions, bar, shipyard · Enter launch"),
+    ("on foot", "walk into people, counters, your ship · Enter"),
     ("pad", "stick flies · A fires · B burns · RB target"),
 ];
 
@@ -223,7 +230,7 @@ mod tests {
     use crate::sim::World;
 
     fn app(w: World, screen: Screen) -> App {
-        App { world: w, screen, map_sector: false, map_sel: 0, dock_row: 0, dock_tab: 0, yard_row: 0, job_row: 0, dock_note: None, saved: None, demo: false, ask_quit: false, hailing: None }
+        App { world: w, screen, map_sector: false, map_sel: 0, dock_row: 0, dock_tab: 0, yard_row: 0, job_row: 0, dock_note: None, saved: None, demo: false, ask_quit: false, hailing: None, deck: None }
     }
 
     fn ui(a: &App) -> Ui<'_> {
@@ -277,6 +284,10 @@ mod tests {
                 frame_of(&docked, cw, ch);
             }
         }
+        docked.go_aboard();
+        for (cw, ch) in [(20, 6), (79, 23), (80, 24), (100, 30), (160, 50), (300, 90)] {
+            frame_of(&docked, cw, ch);
+        }
     }
 
     #[test]
@@ -293,6 +304,15 @@ mod tests {
         let a = app(World::new(5), Screen::Dock);
         let t = frame_of(&a, 100, 30);
         assert!(t.contains("Routa Station") && t.contains("Water ice") && t.contains("index"));
+    }
+
+    #[test]
+    fn on_foot_the_deck_shows_you_and_your_ship() {
+        let mut a = app(World::new(5), Screen::Dock);
+        a.go_aboard();
+        let t = frame_of(&a, 80, 24);
+        assert!(t.contains('@') && t.contains("hangar") && t.contains("exchange") && t.contains("bar"));
+        assert!(t.contains("─┤├─"), "the Tiira's schematic in the hangar");
     }
 
     #[test]

@@ -5,15 +5,23 @@ line of Elite, Wing Commander: Privateer and above all **Ascii Sector**
 (Laserbrain Studios), rebuilt for the terminal in Rust + Ratatui with a
 universe of our own.
 
-**Status (2026-11-07):** 0.5.0 is built, all but the release.
-- Every release so far is in place: flight and combat, regions and
-  trade, factions and missions, the shipyard, and the living belt.
-- **The living belt:** faction fleets fight over who holds each region,
-  off screen, an hour at a time (`sim/war.rs`).
+**Status (2026-11-08):** 0.6.0 is built: walkable bases.
+- Every release up to 0.6.0 is in place: flight and combat, regions and
+  trade, factions and missions, the shipyard, the living belt, and
+  walking the bases on foot.
+- **On foot** (`sim/deck.rs`, `render/deck.rs`): landing puts you in the
+  hangar beside your ship. Each base is a deck: the hangar, then a
+  corridor with rooms above and below (exchange, guild office, bar, the
+  base's own hall, and a shipyard or outfitter where there is one), laid
+  out from the base and the day. Walking into the broker, a terminal, the
+  yard master or the fixer opens the old dock panel for it (Esc steps
+  back); the mechanic repairs; your ship launches; patrons and the
+  bartender talk (rumours, price tips). No time passes on foot, and where
+  you stand is not saved (a loaded game starts in the hangar).
 - **Catalog drafts** are in `asciiverse/saalis.toml` and `.md`. Putting
   them in `hub`, pushing and tagging are David's call.
-- **0.6.0 under way** (2026-11-08): walkable bases, in classic ASCII.
-  The quest format is decided too (Lua); see Decisions.
+- **Next:** 0.7.0, on-foot combat and boarding disabled ships, on the same
+  decks. 0.8.0, quests in Lua (see Decisions).
 - **Tested:** unit tests and tmux runs. No person has played it yet, so
   prices and balance are untuned.
 - **Known simplification:** a market keeps the law of the region's
@@ -56,7 +64,7 @@ Braille, so stars and the radar show as boxes there).
   - `sector.rs`: the Reach's regions, lanes, bases and rocks.
   - `econ.rs`: goods and markets. Prices follow stock, and stock drifts
     back by the hour.
-  - `save.rs`: the one save slot, as versioned JSON (format 3).
+  - `save.rs`: the one save slot, as versioned JSON (format 6).
   - `faction.rs`: factions and standing.
   - `shipyard.rs`: what each base sells (shipyards at hubs, refineries
     and customs; outfitters everywhere but the farm and the clinic;
@@ -66,6 +74,7 @@ Braille, so stars and the radar show as boxes there).
   - `mission.rs`: guilds, jobs and the boards. A board is seeded by the
     base and the day.
   - `v2.rs`: vectors. Heading 0 is up and angles grow clockwise.
+  - `deck.rs`: on foot: a base's deck (rooms, people, walking, bumping).
   - `rng.rs`, `cue.rs`.
 - `src/render/`: drawing.
   - `view.rs`: the camera, with world metres to cells, pixels and dots.
@@ -76,10 +85,14 @@ Braille, so stars and the radar show as boxes there).
     crowd detail) and the box-drawing schematics.
   - `hud.rs`: gauges, the radar, the target box and comms.
   - `navmap.rs`: the region and sector maps.
-  - `dock.rs`: the base and the exchange.
+  - `deck.rs`: the deck on foot (box-drawing walls joined by their
+    neighbours, `@`, people as letters).
+  - `dock.rs`: the side panel and the counters (exchange, boards, bar,
+    yard).
   - `mod.rs`: the layout and the cards (title, keys, pause, quit, ship
     lost).
-- `app.rs`: screens (title, flight, map, dock) and the menus' keys.
+- `app.rs`: screens (title, flight, map, comms, base on foot, the
+  counters) and their keys.
 - Other modules:
   - `input.rs`: Kaiku's three-tier held keys plus one-shot commands.
   - `pad.rs`: gilrs.
@@ -101,6 +114,9 @@ Braille, so stars and the radar show as boxes there).
     player's Kuikka (`Y`), Lokki (`U`) and Haukka (`W`)
   - the plasma gun; stims and AI cores, and which factions ban them
     (`econ::illegal`); all shipyard prices
+  - the deck's room names (market hall, ore hall, smelter, greenhouse,
+    ward, bonded store, inspection bay) and the patrons' and mechanic's
+    lines
 
 ## Name
 

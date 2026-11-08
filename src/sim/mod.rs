@@ -5,6 +5,7 @@
 
 pub mod ai;
 pub mod cue;
+pub mod deck;
 pub mod econ;
 pub mod faction;
 pub mod mission;
@@ -1067,7 +1068,7 @@ impl World {
     }
 
     /// A patrol's news: how quiet this region is, and a word on the Reach.
-    fn rumour(&mut self) -> String {
+    pub fn rumour(&mut self) -> String {
         let here = match self.threat() {
             0 => "Quiet as a tomb here.",
             1 => "A few claim-jumpers, nothing we can't handle.",
@@ -1084,7 +1085,7 @@ impl World {
     }
 
     /// A trader's tip: where one good sells best right now.
-    fn tip(&mut self) -> String {
+    pub fn tip(&mut self) -> String {
         let g = self.rng.below(econ::N as u32) as usize;
         let all = self.sector.all_bases();
         let best = (0..self.markets.len()).filter(|&m| self.markets[m].open[g]).max_by_key(|&m| self.markets[m].sell_price(g));

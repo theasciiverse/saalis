@@ -257,7 +257,8 @@ impl Input {
             return;
         }
         if self.menu {
-            if press {
+            // repeats too: holding an arrow walks down a corridor
+            if press || k.kind == KeyEventKind::Repeat {
                 self.pressed.push(k);
             }
             return;

@@ -58,11 +58,16 @@ comfortable.
 | F1 | keys |
 | Esc | quit |
 
-Docked: Tab switches between the exchange, the mission boards, the bar
-and the shipyard. At the exchange ↑ ↓ choose a good, B or → buys, S or ← sells (Shift
-for ten). On the boards and in the bar A takes a job, and 1 or 2 joins a
-guild. R repairs, F saves, Enter launches. Every landing saves the game; C on
-the title continues it.
+Docked, you walk the base on foot: arrows, WASD or hjkl move (y u b n
+and the numpad go diagonally), and walking into someone or something uses
+it. The broker's counter opens the exchange, the guild office's terminals
+the mission boards, the yard master's counter the shipyard, the fixer in
+the bar their job; the mechanic beside your ship repairs it, and walking
+into your ship launches. Enter uses whatever is beside you; walking into a
+passer-by twice squeezes past. At the exchange ↑ ↓ choose a good, B or →
+buys, S or ← sells (Shift for ten). On the boards and in the bar A takes a
+job, and 1 or 2 joins a guild. Esc steps away from a counter. F saves;
+every landing saves the game, and C on the title continues it.
 
 Gamepad: the left stick turns and throttles, A fires, B burns, the right
 bumper picks the next target, the left bumper the nearest, Start pauses.
