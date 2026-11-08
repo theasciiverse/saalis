@@ -12,9 +12,8 @@ universe of our own.
   off screen, an hour at a time (`sim/war.rs`).
 - **Catalog drafts** are in `asciiverse/saalis.toml` and `.md`. Putting
   them in `hub`, pushing and tagging are David's call.
-- **Stopped before 0.6.0:** walkable bases need the on-foot art
-  decision, and 0.8.0 needs the quest format. Both are David's open
-  questions below.
+- **0.6.0 under way** (2026-11-08): walkable bases, in classic ASCII.
+  The quest format is decided too (Lua); see Decisions.
 - **Tested:** unit tests and tmux runs. No person has played it yet, so
   prices and balance are untuned.
 - **Known simplification:** a market keeps the law of the region's
@@ -308,12 +307,52 @@ RNG.
 - **The `games/CLAUDE.md` index** lists Saalis under "notes only". Move
   it to "Spiritual successors" once there is code.
 
+## Decisions (David, 2026-11-08)
+
+### On foot: classic ASCII
+
+Bases (0.6) and ship interiors (0.7) are drawn as a classic ASCII
+roguelike map, not half-block floor plans. Reasons: it is the genre's
+own language (Ascii Sector's on-foot play was a semi-turn-based
+roguelike), it keeps half-block for big things in space so docking reads
+as a change of scale, and letters tell people apart at 80x24.
+
+Within it, the glyph roles still hold:
+
+| Element | Glyphs |
+|---|---|
+| Walls and room outlines | box-drawing pipes (`┌─┐│└┘├┤┬┴┼`), the same line language as the stations outside |
+| You | `@` |
+| Everyone else | a letter (`b` bartender, `g` guard, `f` fixer, ...) in their faction's colour |
+| Doors, counters, terminals, crates | classic ASCII (`+ ' = & ...`) |
+| Floor | a dim `·` |
+
+### Quests: Lua 5.4, with the content as data
+
+Quests are written in Lua 5.4, embedded through `mlua` with the
+`vendored` feature (Lua's C source compiles into the binary; players
+install nothing). Chosen over Rhai (a Rust-only language few know) and
+our own format, because Lua is what game modders already know, and its
+coroutines let a quest read in order (`wait_until(docked_at("Halla"))`)
+in place of a state machine. Static content (cast, places, ships,
+dialogue text) is TOML data; scripts hold the logic.
+
+Tried on 2026-11-08 in a throwaway crate: built first time with the
+system C compiler (28 s clean, a few hundred KB added); a coroutine
+quest paused and resumed across ticks; the sandbox held.
+
+The sandbox, which must have tests:
+- load only `coroutine`, `table`, `string` and `math`: no `io`, `os`,
+  `package` or `debug`
+- remove `dofile` and `loadfile` (Lua's base library has them and they
+  read files), and allow `load` text only, never bytecode
+- a memory limit and an instruction-count hook against runaway scripts
+
+To check at the first tagged release that carries Lua: the
+`aarch64-pc-windows-msvc` build (built on an x64 runner, so Lua's C is
+cross-compiled there).
+
 ## Open questions (David's to decide)
 
-- [ ] On-foot and interior art (half-block floor plans or classic ASCII).
-      Deferred by David 2026-11-07: decide once the space view and HUD
-      designs are in place.
-- [ ] Quest format: own declarative format, or an embedded language
-      (such as Rhai). Deferred by David 2026-11-07: review later.
 - [ ] Subtitle and motto, if any
 - [ ] Trademark checks (EUIPO, PRH, USPTO) before announcing

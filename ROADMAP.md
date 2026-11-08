@@ -47,8 +47,8 @@ Built 2026-11-07, all but the release itself.
 
 ## 0.6.0 to 0.8.0
 
-Waiting on David: the on-foot and interior art (half-block floor plans or
-classic ASCII) and the quest format are his open questions.
+Decided 2026-11-08: on foot is classic ASCII; quests are Lua 5.4 (mlua) with
+TOML data (see `CLAUDE.md`).
 
 - [ ] Walkable bases
 - [ ] On-foot combat and boarding disabled ships
