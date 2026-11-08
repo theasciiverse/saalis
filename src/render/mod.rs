@@ -6,6 +6,7 @@ pub mod deck;
 pub mod dock;
 pub mod glyphs;
 pub mod hud;
+pub mod journal;
 pub mod navmap;
 pub mod palette;
 pub mod space;
@@ -215,7 +216,7 @@ const KEYS: [(&str, &str); 22] = [
     ("F8", "sound on, off"),
     ("F1", "these keys"),
     ("Esc", "quit"),
-    ("on foot", "walk into things to use them · aboard: F fire, M medkit"),
+    ("on foot", "walk into things to use them · Enter talks · aboard: F fire, M medkit"),
     ("pad", "stick flies · A fires · B burns · RB target"),
 ];
 
@@ -234,7 +235,24 @@ mod tests {
     use crate::sim::World;
 
     fn app(w: World, screen: Screen) -> App {
-        App { world: w, screen, map_sector: false, map_sel: 0, dock_row: 0, dock_tab: 0, yard_row: 0, job_row: 0, dock_note: None, saved: None, demo: false, ask_quit: false, hailing: None, deck: None }
+        App {
+            world: w,
+            screen,
+            map_sector: false,
+            map_sel: 0,
+            dock_row: 0,
+            dock_tab: 0,
+            yard_row: 0,
+            job_row: 0,
+            dock_note: None,
+            saved: None,
+            demo: false,
+            ask_quit: false,
+            hailing: None,
+            deck: None,
+            quests: crate::sim::quest::Quests::new(Vec::new()),
+            quest_wait: 0,
+        }
     }
 
     fn ui(a: &App) -> Ui<'_> {
@@ -325,6 +343,51 @@ mod tests {
         let t = frame_of(&a, 80, 24);
         assert!(t.contains('@') && t.contains("hangar") && t.contains("exchange") && t.contains("bar"));
         assert!(t.contains("─┤├─"), "the Tiira's schematic in the hangar");
+    }
+
+    #[test]
+    fn a_quest_talks_in_a_box_and_keeps_a_journal() {
+        use crate::sim::quest::{Quests, Tick};
+        let mut a = app(World::new(5), Screen::Base);
+        a.quests = Quests::built_in();
+        a.quests.tick(
+            &mut a.world,
+            &Tick {
+                on_foot: true,
+                talked: None,
+            },
+        );
+        a.go_aboard();
+        let t = frame_of(&a, 100, 30);
+        assert!(
+            t.contains("QUESTS") && t.contains("The Jumped Claim"),
+            "the journal beside the deck"
+        );
+        a.quests.tick(
+            &mut a.world,
+            &Tick {
+                on_foot: true,
+                talked: Some("ilta".into()),
+            },
+        );
+        let t = frame_of(&a, 100, 30);
+        assert!(
+            t.contains("Ilta Rask") && t.contains("You fly?"),
+            "her line in the talk box"
+        );
+        a.quests.dismiss();
+        let t = frame_of(&a, 100, 30);
+        assert!(
+            t.contains("1 I'll get it back.") && t.contains("1–3 answer"),
+            "her question and its options"
+        );
+        for (cw, ch) in [(20, 6), (79, 23), (80, 24), (100, 30), (160, 50), (300, 90)] {
+            frame_of(&a, cw, ch);
+        }
+        a.dock_tab = 1;
+        a.screen = Screen::Dock;
+        let t = frame_of(&a, 100, 30);
+        assert!(t.contains("The Jumped Claim"), "on the mission boards");
     }
 
     #[test]

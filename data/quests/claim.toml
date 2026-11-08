@@ -1,0 +1,32 @@
+# The built-in quest of 0.8.0: a first story, and the example for anyone
+# writing their own (see QUESTS.md). Every name and line here is a
+# placeholder until the Reach's own are settled.
+
+title = "The Jumped Claim"
+
+[people.ilta]
+name = "Ilta Rask"
+glyph = "i"
+faction = "coop"
+base = "Routa Station"
+room = "bar"
+idle = "Kide Drift. An Ahma with a jumper's paint job. You can't miss it."
+
+[text]
+hook = "Someone in Routa Station's bar is asking for a pilot."
+hello = "You fly? Sit. I work a claim out in Kide Drift, ice and a seam of rare earths, registered and beaconed. Two days ago a crew of jumpers cut my beacon off its mast and took it. No beacon, no claim. Whoever holds it can file it as theirs."
+ask = "They're still out there in an Ahma, waiting for the Watch to look away. Will you get it back?"
+yes = "I'll get it back."
+pay = "What's in it for me?"
+no = "Not my problem."
+offer = "Fifteen hundred when the beacon's in my hand. And three hundred now, for a vest or medkits: you'll be going aboard."
+refused = "Then I'll find someone who cares."
+thanks = "Good. Disable the Ahma, don't scrap it. The beacon's in the hold, and when it goes, my claim goes with it."
+spotted = "That's them, the Ahma. Leave it dead in space and board it. Watch the other one."
+lost = "The Ahma went up, and the beacon with it. The claim's gone."
+fled = "They'll still be out in Kide Drift. Go back when you're ready."
+found = "You pull a scorched claim beacon from a crate. Ilta's mark is on the casing."
+home = "Bring the beacon to Ilta Rask in Routa Station's bar."
+back = "That's it. That's my beacon."
+hint = "Funny thing. They didn't touch the ice. They went straight for the beacon's survey log, as if they knew what was under my claim. I don't know what's under my claim."
+done = "Ilta's claim is hers again. 1500 cr paid."

@@ -5,10 +5,34 @@ line of Elite, Wing Commander: Privateer and above all **Ascii Sector**
 (Laserbrain Studios), rebuilt for the terminal in Rust + Ratatui with a
 universe of our own.
 
-**Status (2026-11-08):** 0.7.0 is built: on-foot combat and boarding.
-- Every release up to 0.7.0 is in place: flight and combat, regions and
+**Status (2026-11-08):** 0.8.0 is built: quests in Lua.
+- Every release up to 0.8.0 is in place: flight and combat, regions and
   trade, factions and missions, the shipyard, the living belt, walking
-  the bases on foot, and boarding.
+  the bases on foot, boarding, and quests.
+- **Quests** (0.8, `sim/quest.rs`, `QUESTS.md` for writers): each quest is
+  `<id>.toml` (title, people, lines) and `<id>.lua` (a table of stage
+  functions, each run as a coroutine; returning a stage's name moves on).
+  Built-in quests are compiled in from `data/quests/`; players' own load
+  from `quests/` in the save folder. The save keeps each quest's stage,
+  `vars`, objective and placed people (`quest::Saved`), and a loaded
+  stage starts again from its top. One Lua state for all quests. The
+  game's functions are scoped to each tick (`Lua::scope` over the
+  `World`) behind lasting wrappers, so a script may keep one. Quests run
+  every 6 frames, and at once when you talk to a quest's person or answer
+  them. People (`deck::Named`, `Who::Named`) stand where they cut nothing
+  off (`Deck::cut_off`). Lines and questions show in a talk box on foot;
+  in flight, lines go to the comms. The journal (`render/journal.rs`)
+  shows beside the deck, on the nav map and on the boards. Ships a quest
+  spawns carry a `tag`, and one may carry an `item`: such a ship is always
+  knocked out, never destroyed, by its last hit, and the item is in a
+  crate of its own when boarded. Items are saved in `World::items`. A
+  broken quest (a Lua error, a runaway loop, too much memory) only stops
+  itself, and shows as broken in the journal.
+- **The Jumped Claim** (`data/quests/claim.*`): Ilta Rask in Routa's
+  bar, whose claim beacon jumpers took. Hunt their Ahma in Kide Drift,
+  board it, bring the beacon back: 1500 cr (300 up front if you ask what's
+  in it for you). Her last line hints that the jumpers knew what was under
+  her claim (the found artifact, still open).
 - **On foot** (`sim/deck.rs`, `render/deck.rs`): landing puts you in the
   hangar beside your ship. Each base is a deck: the hangar, then a
   corridor with rooms above and below (exchange, guild office, bar, the
@@ -38,7 +62,9 @@ universe of our own.
   trying it.
 - **Catalog drafts** are in `asciiverse/saalis.toml` and `.md`. Putting
   them in `hub`, pushing and tagging are David's call.
-- **Next:** 0.8.0, quests in Lua (see Decisions).
+- **Next:** 1.0.0, the written story, balance and full content (see
+  `ROADMAP.md`). The Windows ARM build check for Lua is still to do at the
+  first tagged release that carries it.
 - **Tested:** unit tests and tmux runs. No person has played it yet, so
   prices and balance are untuned.
 - **Known simplification:** a market keeps the law of the region's
@@ -81,7 +107,10 @@ Braille, so stars and the radar show as boxes there).
   - `sector.rs`: the Reach's regions, lanes, bases and rocks.
   - `econ.rs`: goods and markets. Prices follow stock, and stock drifts
     back by the hour.
-  - `save.rs`: the one save slot, as versioned JSON (format 6).
+  - `save.rs`: the one save slot, as versioned JSON (format 6; 0.8's
+    items and quests are optional fields). Under `cfg(test)` there is no
+    save folder, so no test can overwrite a player's save (one did, on
+    2026-11-08).
   - `faction.rs`: factions and standing.
   - `shipyard.rs`: what each base sells (shipyards at hubs, refineries
     and customs; outfitters everywhere but the farm and the clinic;
@@ -94,6 +123,8 @@ Braille, so stars and the radar show as boxes there).
   - `deck.rs`: on foot: a base's deck (rooms, people, walking, bumping)
     and a boarded ship's (crew, turn-based fighting, loot).
   - `body.rs`: you on foot: health, sidearms, vests, medkits.
+  - `quest.rs`: the Lua quest engine: loading, the sandbox, the game's
+    functions, stages, saving.
   - `rng.rs`, `cue.rs`.
 - `src/render/`: drawing.
   - `view.rs`: the camera, with world metres to cells, pixels and dots.
@@ -105,7 +136,8 @@ Braille, so stars and the radar show as boxes there).
   - `hud.rs`: gauges, the radar, the target box and comms.
   - `navmap.rs`: the region and sector maps.
   - `deck.rs`: the deck on foot (box-drawing walls joined by their
-    neighbours, `@`, people as letters).
+    neighbours, `@`, people as letters) and the quests' talk box.
+  - `journal.rs`: the quests' journal.
   - `dock.rs`: the side panel and the counters (exchange, boards, bar,
     yard).
   - `mod.rs`: the layout and the cards (title, keys, pause, quit, ship
@@ -135,6 +167,8 @@ Braille, so stars and the radar show as boxes there).
     (`econ::illegal`); all shipyard prices
   - the sidearms and vests and their numbers (`body.rs`), the crew's
     lines and the mayday calls
+  - the quest The Jumped Claim: its title, Ilta Rask, the Ahma Varis, the
+    claim beacon and every line in `data/quests/claim.toml`
   - the deck's room names (market hall, ore hall, smelter, greenhouse,
     ward, bonded store, inspection bay) and the patrons' and mechanic's
     lines

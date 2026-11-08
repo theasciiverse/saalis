@@ -55,7 +55,9 @@ TOML data (see `CLAUDE.md`).
 - [x] On-foot combat and boarding disabled ships (0.7.0, built 2026-11-08):
       ships can be knocked out, boarded with L, the crew fought turn by turn
       on a ship deck, the hold and console looted
-- [ ] Quest format and loader
+- [x] Quest format and loader (0.8.0, built 2026-11-08): Lua 5.4 stages
+      with TOML casts, sandboxed; the game's first quest, The Jumped Claim;
+      players' own quests from the save folder (`QUESTS.md`)
 
 ## 1.0.0
 - [ ] Written story, balance, full content

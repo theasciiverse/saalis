@@ -104,6 +104,8 @@ pub enum Who {
     Patron(u8),
     /// aboard a boarded ship: a raider, a spacer, a patrol officer
     Crew(u8),
+    /// someone a quest put here: an index into the deck's `named`
+    Named(u8),
 }
 
 impl Who {
@@ -118,6 +120,7 @@ impl Who {
             Who::Guard => 'g',
             Who::Patron(k) => ['p', 'w', 's'][k as usize % 3],
             Who::Crew(k) => ['r', 's', 'g'][k as usize % 3],
+            Who::Named(_) => '?',
         }
     }
 
@@ -132,6 +135,7 @@ impl Who {
             Who::Guard => "a guard",
             Who::Patron(k) => ["a pilot", "a worker", "a spacer"][k as usize % 3],
             Who::Crew(k) => ["a raider", "a spacer", "a patrol officer"][k as usize % 3],
+            Who::Named(_) => "someone",
         }
     }
 
@@ -149,6 +153,15 @@ pub struct Npc {
     room: u8,
     /// someone who fights: the crew of a boarded ship
     pub fight: Option<Fight>,
+}
+
+/// Someone a quest put on the deck, by name.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Named {
+    /// the quest's id for them
+    pub id: String,
+    pub name: String,
+    pub glyph: char,
 }
 
 /// A fighter's state on foot.
@@ -180,6 +193,8 @@ pub struct Loot {
     /// a good and how many
     pub cargo: Option<(usize, u32)>,
     pub credits: u32,
+    /// the deck's `item`, put aboard by a quest
+    pub item: bool,
 }
 
 /// What walking into something, or Enter beside it, does.
@@ -212,10 +227,18 @@ impl Use {
             Use::Fixer => "a fixer, waiting for someone".into(),
             Use::Repair => "the dock mechanic".into(),
             Use::Launch => "your ship".into(),
-            Use::Talk(i) if deck.npcs[i].fight.as_ref().is_some_and(|f| f.surrendered) => format!("{}, hands up", deck.npcs[i].who.name()),
-            Use::Talk(i) => deck.npcs[i].who.name().into(),
-            Use::Attack(i) => format!("{}: walk into them to fight", deck.npcs[i].who.name()),
-            Use::Loot(x, y) => if deck.tile(x, y) == Tile::Console { "the ship's console".into() } else { "a cargo crate".into() },
+            Use::Talk(i) if deck.npcs[i].fight.as_ref().is_some_and(|f| f.surrendered) => {
+                format!("{}, hands up", deck.name_of(i))
+            }
+            Use::Talk(i) => deck.name_of(i),
+            Use::Attack(i) => format!("{}: walk into them to fight", deck.name_of(i)),
+            Use::Loot(x, y) => {
+                if deck.tile(x, y) == Tile::Console {
+                    "the ship's console".into()
+                } else {
+                    "a cargo crate".into()
+                }
+            }
             Use::Leave => "the hatch to your ship".into(),
         }
     }
@@ -263,6 +286,11 @@ pub struct Deck {
     pub loot: Vec<((i32, i32), Loot)>,
     /// what happened, newest last
     pub log: Vec<String>,
+    /// people a quest put here (`Who::Named`)
+    pub named: Vec<Named>,
+    /// aboard: something a quest hid in the hold (the crate whose loot has
+    /// `item` set)
+    pub item: Option<String>,
 }
 
 impl Deck {
@@ -291,6 +319,122 @@ impl Deck {
     /// The room you stand in, if any (the corridor and doorways are none).
     pub fn here(&self) -> Option<&Room> {
         self.rooms.get(self.room_at(self.you.0, self.you.1) as usize)
+    }
+
+    /// What to call someone: "the bartender", or a quest's person by name.
+    pub fn name_of(&self, i: usize) -> String {
+        match self.npcs[i].who {
+            Who::Named(k) => self
+                .named
+                .get(k as usize)
+                .map_or("someone".into(), |n| n.name.clone()),
+            who => who.name().into(),
+        }
+    }
+
+    pub fn glyph_of(&self, i: usize) -> char {
+        match self.npcs[i].who {
+            Who::Named(k) => self.named.get(k as usize).map_or('?', |n| n.glyph),
+            who => who.glyph(),
+        }
+    }
+
+    /// A quest's person, if `i` is one: their id.
+    pub fn named_id(&self, i: usize) -> Option<&str> {
+        match self.npcs.get(i)?.who {
+            Who::Named(k) => self.named.get(k as usize).map(|n| n.id.as_str()),
+            _ => None,
+        }
+    }
+
+    /// Puts a quest's person in the first room of `place` (the corridor if
+    /// there is none, or `place` is None), somewhere they block nothing:
+    /// not by a door or a counter, and never cutting any floor off.
+    /// Returns whether a spot was found.
+    pub fn add_named(&mut self, n: Named, faction: Faction, place: Option<Place>) -> bool {
+        let room = place
+            .and_then(|p| self.rooms.iter().position(|r| r.place == p))
+            .map_or(CORRIDOR, |r| r as u8);
+        let mut spots = Vec::new();
+        for y in 0..self.h {
+            for x in 0..self.w {
+                if self.room_at(x, y) != room
+                    || self.tile(x, y) != Tile::Floor
+                    || self.npc_at(x, y).is_some()
+                    || self.you == (x, y)
+                {
+                    continue;
+                }
+                let crowded = (-1..=1).any(|dx| {
+                    (-1..=1).any(|dy| {
+                        !matches!(
+                            self.tile(x + dx, y + dy),
+                            Tile::Floor | Tile::Wall | Tile::Void
+                        )
+                    })
+                });
+                if !crowded {
+                    spots.push((x, y));
+                }
+            }
+        }
+        for i in (1..spots.len()).rev() {
+            let j = self.rng.below(i as u32 + 1) as usize;
+            spots.swap(i, j);
+        }
+        let k = self.named.len() as u8;
+        let before = self.cut_off().len();
+        for (x, y) in spots {
+            self.npcs.push(Npc {
+                x,
+                y,
+                who: Who::Named(k),
+                faction,
+                room,
+                fight: None,
+            });
+            if self.cut_off().len() <= before {
+                log::info!("on foot: {} placed at {:?}", n.name, (x, y));
+                self.named.push(n);
+                return true;
+            }
+            self.npcs.pop();
+        }
+        log::warn!("on foot: no room for {}", n.name);
+        false
+    }
+
+    /// Floor that can't be reached from where you stand, with people who
+    /// never move (staff, quests' people) counted as walls.
+    pub fn cut_off(&self) -> Vec<(i32, i32)> {
+        // crew move, and can be fought: only staff count as walls
+        let still = |x, y| {
+            self.npcs
+                .iter()
+                .any(|n| n.x == x && n.y == y && !n.who.wanders() && n.fight.is_none())
+        };
+        let mut seen = vec![false; (self.w * self.h) as usize];
+        let at = |x: i32, y: i32| (y * self.w + x) as usize;
+        let mut todo = vec![self.you];
+        seen[at(self.you.0, self.you.1)] = true;
+        while let Some((x, y)) = todo.pop() {
+            for (dx, dy) in [(0, -1), (1, 0), (0, 1), (-1, 0)] {
+                let p = (x + dx, y + dy);
+                if self.tile(p.0, p.1).open() && !still(p.0, p.1) && !seen[at(p.0, p.1)] {
+                    seen[at(p.0, p.1)] = true;
+                    todo.push(p);
+                }
+            }
+        }
+        let mut out = Vec::new();
+        for y in 0..self.h {
+            for x in 0..self.w {
+                if self.tile(x, y) == Tile::Floor && !still(x, y) && !seen[at(x, y)] {
+                    out.push((x, y));
+                }
+            }
+        }
+        out
     }
 
     pub fn npc_at(&self, x: i32, y: i32) -> Option<usize> {
@@ -415,7 +559,22 @@ impl Deck {
             }
         }
         let w = end + 1;
-        let mut d = Deck { w, h: H, boarding: false, loot: Vec::new(), log: Vec::new(), tiles: vec![Tile::Void; (w * H) as usize], room_of: vec![NONE; (w * H) as usize], rooms: Vec::new(), npcs: Vec::new(), you: (0, 0), ship_at: (0, 0), rng };
+        let mut d = Deck {
+            w,
+            h: H,
+            boarding: false,
+            loot: Vec::new(),
+            log: Vec::new(),
+            named: Vec::new(),
+            item: None,
+            tiles: vec![Tile::Void; (w * H) as usize],
+            room_of: vec![NONE; (w * H) as usize],
+            rooms: Vec::new(),
+            npcs: Vec::new(),
+            you: (0, 0),
+            ship_at: (0, 0),
+            rng,
+        };
 
         // the hangar
         d.room(Place::Hangar, hangar_name(spec.kind), 0, 0, HANGAR_W - 1, H - 1);
@@ -589,6 +748,8 @@ pub struct Boarding {
     pub cargo: Vec<(usize, u32)>,
     /// in the console
     pub credits: u32,
+    /// something a quest put aboard, in a crate of its own
+    pub item: Option<String>,
 }
 
 /// Rows aboard a boarded ship.
@@ -605,7 +766,22 @@ impl Deck {
         }
         rooms.push(("cockpit", 9));
         let w = rooms.iter().map(|r| r.1 - 1).sum::<i32>() + 1;
-        let mut d = Deck { w, h: SHIP_H, boarding: true, loot: Vec::new(), log: Vec::new(), tiles: vec![Tile::Void; (w * SHIP_H) as usize], room_of: vec![NONE; (w * SHIP_H) as usize], rooms: Vec::new(), npcs: Vec::new(), you: (2, SHIP_H / 2), ship_at: (0, 0), rng };
+        let mut d = Deck {
+            w,
+            h: SHIP_H,
+            boarding: true,
+            loot: Vec::new(),
+            log: Vec::new(),
+            named: Vec::new(),
+            item: b.item.clone(),
+            tiles: vec![Tile::Void; (w * SHIP_H) as usize],
+            room_of: vec![NONE; (w * SHIP_H) as usize],
+            rooms: Vec::new(),
+            npcs: Vec::new(),
+            you: (2, SHIP_H / 2),
+            ship_at: (0, 0),
+            rng,
+        };
         let mut x0 = 0;
         for &(name, rw) in &rooms {
             let place = if name == "hold" { Place::Hall } else { Place::Hangar };
@@ -631,7 +807,23 @@ impl Deck {
         for (k, &(x, y)) in spots.iter().enumerate() {
             d.put(x, y, Tile::Crate);
             if let Some(&(g, n)) = b.cargo.get(k) {
-                d.loot.push(((x, y), Loot { cargo: Some((g, n)), credits: 0 }));
+                d.loot.push((
+                    (x, y),
+                    Loot {
+                        cargo: Some((g, n)),
+                        credits: 0,
+                        item: false,
+                    },
+                ));
+            } else if k == b.cargo.len() && b.item.is_some() {
+                d.loot.push((
+                    (x, y),
+                    Loot {
+                        cargo: None,
+                        credits: 0,
+                        item: true,
+                    },
+                ));
             }
             if k >= b.cargo.len() + 3 {
                 break;
@@ -649,7 +841,14 @@ impl Deck {
         for y in 2..SHIP_H - 2 {
             d.put(c.x1 - 1, y, Tile::Console);
         }
-        d.loot.push(((c.x1 - 1, SHIP_H / 2), Loot { cargo: None, credits: b.credits }));
+        d.loot.push((
+            (c.x1 - 1, SHIP_H / 2),
+            Loot {
+                cargo: None,
+                credits: b.credits,
+                item: false,
+            },
+        ));
         // the crew: one at the controls, the rest about the ship
         for k in 0..b.crew.max(1) {
             let r = if k == 0 { d.rooms.len() - 1 } else { 1 + d.rng.below(d.rooms.len() as u32 - 1) as usize };
@@ -686,7 +885,7 @@ impl Deck {
 
     /// Puts back what didn't fit in your hold.
     pub fn leave_loot(&mut self, x: i32, y: i32, l: Loot) {
-        if l.cargo.is_some_and(|c| c.1 > 0) || l.credits > 0 {
+        if l.cargo.is_some_and(|c| c.1 > 0) || l.credits > 0 || l.item {
             self.loot.push(((x, y), l));
         }
     }
@@ -983,32 +1182,8 @@ mod tests {
         }
     }
 
-    /// Every floor tile, reached from where you start, with people who never
-    /// move counted as walls.
     fn unreachable(d: &Deck) -> Vec<(i32, i32)> {
-        // crew move, and can be fought: only staff count as walls
-        let still = |x, y| d.npcs.iter().any(|n| n.x == x && n.y == y && !n.who.wanders() && n.fight.is_none());
-        let mut seen = vec![d.you];
-        let mut i = 0;
-        while i < seen.len() {
-            let (x, y) = seen[i];
-            for (dx, dy) in [(0, -1), (1, 0), (0, 1), (-1, 0)] {
-                let p = (x + dx, y + dy);
-                if d.tile(p.0, p.1).open() && !still(p.0, p.1) && !seen.contains(&p) {
-                    seen.push(p);
-                }
-            }
-            i += 1;
-        }
-        let mut out = Vec::new();
-        for y in 0..d.h {
-            for x in 0..d.w {
-                if d.tile(x, y) == Tile::Floor && !still(x, y) && !seen.contains(&(x, y)) {
-                    out.push((x, y));
-                }
-            }
-        }
-        out
+        d.cut_off()
     }
 
     #[test]
@@ -1025,7 +1200,18 @@ mod tests {
         }
         for seed in 1..200 {
             for size in 0..3 {
-                let d = Deck::board(&Boarding { size, faction: Faction::Pirates, crew_kind: 0, crew: 0, cargo: vec![(0, 5); 4], credits: 9 }, seed);
+                let d = Deck::board(
+                    &Boarding {
+                        size,
+                        faction: Faction::Pirates,
+                        crew_kind: 0,
+                        crew: 0,
+                        cargo: vec![(0, 5); 4],
+                        credits: 9,
+                        item: None,
+                    },
+                    seed,
+                );
                 let u = unreachable(&d);
                 if !u.is_empty() {
                     bad.push(format!("ship size {size} seed {seed}: {} tiles, e.g. {:?}", u.len(), u[0]));
@@ -1081,7 +1267,15 @@ mod tests {
     }
 
     fn boarding(kind: u8, crew: u8) -> Boarding {
-        Boarding { size: 1, faction: Faction::Pirates, crew_kind: kind, crew, cargo: vec![(0, 6), (10, 3)], credits: 300 }
+        Boarding {
+            size: 1,
+            faction: Faction::Pirates,
+            crew_kind: kind,
+            crew,
+            cargo: vec![(0, 6), (10, 3)],
+            credits: 300,
+            item: None,
+        }
     }
 
     #[test]
@@ -1177,7 +1371,18 @@ mod odds {
     /// A fighter who walks to the nearest crew, fires when they can and
     /// heals when hurt. Returns whether it won.
     pub fn fight(crew: u8, seed: u64, me: &mut Body) -> bool {
-        let mut d = Deck::board(&Boarding { size: 1, faction: Faction::Pirates, crew_kind: 0, crew, cargo: vec![(0, 5)], credits: 9 }, seed);
+        let mut d = Deck::board(
+            &Boarding {
+                size: 1,
+                faction: Faction::Pirates,
+                crew_kind: 0,
+                crew,
+                cargo: vec![(0, 5)],
+                credits: 9,
+                item: None,
+            },
+            seed,
+        );
         for _ in 0..600 {
             if d.crew_left() == 0 {
                 return true;

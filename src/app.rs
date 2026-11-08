@@ -3,6 +3,7 @@
 
 use crate::sim::deck::{Deck, Place, Spec, Step, Use};
 use crate::sim::econ;
+use crate::sim::quest::{Quests, Tick};
 use crate::sim::save;
 use crate::sim::{Nav, Phase, World};
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -46,12 +47,84 @@ pub struct App {
     pub hailing: Option<u32>,
     /// the base's deck, while docked
     pub deck: Option<Deck>,
+    /// the stories running in this game
+    pub quests: Quests,
+    /// frames since the quests last ran
+    pub quest_wait: u32,
 }
+
+/// The quests run this often (frames), and at once when you talk to
+/// someone or answer.
+const QUEST_EVERY: u32 = 6;
 
 impl App {
     pub fn new(world: World, screen: Screen, demo: bool) -> App {
         let saved = save::read().map(|s| save::describe(&s));
-        App { world, screen, map_sector: false, map_sel: 0, dock_row: 0, dock_tab: 0, yard_row: 0, job_row: 0, dock_note: None, saved, demo, ask_quit: false, hailing: None, deck: None }
+        App {
+            world,
+            screen,
+            map_sector: false,
+            map_sel: 0,
+            dock_row: 0,
+            dock_tab: 0,
+            yard_row: 0,
+            job_row: 0,
+            dock_note: None,
+            saved,
+            demo,
+            ask_quit: false,
+            hailing: None,
+            deck: None,
+            quests: Quests::new(Vec::new()),
+            quest_wait: 0,
+        }
+    }
+
+    /// Whether you are walking a deck.
+    fn on_foot(&self) -> bool {
+        self.deck.is_some() && matches!(self.screen, Screen::Base | Screen::Dock)
+    }
+
+    /// Runs the quests now and then (every frame is too often to matter),
+    /// and puts their people on the deck.
+    pub fn tick_quests(&mut self) {
+        if self.screen == Screen::Title || self.demo {
+            return;
+        }
+        self.quest_wait += 1;
+        if self.quest_wait >= QUEST_EVERY {
+            self.quest_wait = 0;
+            let t = Tick {
+                on_foot: self.on_foot(),
+                talked: None,
+            };
+            self.quests.tick(&mut self.world, &t);
+        }
+        self.place_people();
+    }
+
+    /// The quests' people, on this base's deck, if they changed.
+    fn place_people(&mut self) {
+        if !std::mem::take(&mut self.quests.people_changed) {
+            return;
+        }
+        let Phase::Docked(b) = self.world.phase else {
+            return;
+        };
+        let Some(deck) = self.deck.as_mut().filter(|d| !d.boarding) else {
+            return;
+        };
+        // those who left go; those who came stand somewhere; the rest stay put
+        let want = self.quests.people_at(self.world.bases[b].name);
+        let gone: Vec<usize> = (0..deck.npcs.len()).filter(|&i| deck.named_id(i).is_some_and(|id| !want.iter().any(|w| w.0.id == id))).collect();
+        for i in gone.into_iter().rev() {
+            deck.npcs.remove(i);
+        }
+        for (n, f, place) in want {
+            if !(0..deck.npcs.len()).any(|i| deck.named_id(i) == Some(n.id.as_str())) {
+                deck.add_named(n, f, place);
+            }
+        }
     }
 
     /// Whether keys go to a menu rather than to flight.
@@ -61,6 +134,13 @@ impl App {
 
     pub fn new_game(&mut self, seed: u64) {
         self.world = World::new(seed);
+        self.quests = Quests::load_all();
+        // the quests' first look at the world, so their people are in place
+        let t = Tick {
+            on_foot: true,
+            talked: None,
+        };
+        self.quests.tick(&mut self.world, &t);
         self.go_aboard();
         self.dock_note = Some("Welcome to Routa. The Reach is yours to work.".into());
         log::info!("new game seed={seed}");
@@ -68,9 +148,13 @@ impl App {
 
     /// Loads the save; returns whether there was one.
     pub fn continue_game(&mut self) -> bool {
-        match save::read().and_then(World::from_save) {
+        let Some(s) = save::read() else { return false };
+        let quests = s.quests.clone();
+        match World::from_save(s) {
             Some(w) => {
                 self.world = w;
+                self.quests = Quests::load_all();
+                self.quests.restore(&quests);
                 self.go_aboard();
                 self.dock_note = Some("Saved game loaded.".into());
                 log::info!("continue: {}", self.world.region_name());
@@ -81,7 +165,8 @@ impl App {
     }
 
     pub fn save(&mut self) {
-        if let Some(s) = self.world.to_save() {
+        if let Some(mut s) = self.world.to_save() {
+            s.quests = self.quests.save();
             let ok = save::write(&s);
             self.saved = Some(save::describe(&s));
             self.dock_note = Some(if ok { "Game saved.".into() } else { "Could not save: see the session log.".into() });
@@ -137,6 +222,8 @@ impl App {
         self.deck = Some(Deck::build(&spec, seed));
         self.screen = Screen::Base;
         log::info!("aboard {} on foot", base.name);
+        self.quests.people_changed = true;
+        self.place_people();
     }
 
     pub fn open_map(&mut self) {
@@ -188,7 +275,31 @@ impl App {
             KeyCode::Char('n') | KeyCode::Char('3') | KeyCode::PageDown => Some((1, 1)),
             _ => None,
         };
-        let Some(deck) = self.deck.as_mut() else { return };
+        // someone is talking to you: read on, or answer
+        if let Some(t) = self.quests.talk.front() {
+            match k.code {
+                KeyCode::Char(c @ '1'..='9') if !t.choices.is_empty() => {
+                    if self.quests.answer(c as usize - '0' as usize) {
+                        self.run_quests_now(None);
+                    }
+                }
+                KeyCode::Enter
+                | KeyCode::Char(' ')
+                | KeyCode::Char('e')
+                | KeyCode::Char('E')
+                | KeyCode::Esc
+                    if t.choices.is_empty() =>
+                {
+                    self.quests.dismiss();
+                    self.run_quests_now(None);
+                }
+                _ => {}
+            }
+            return;
+        }
+        let Some(deck) = self.deck.as_mut() else {
+            return;
+        };
         let body = &mut self.world.body;
         let aboard = deck.boarding;
         if let Some((dx, dy)) = walk {
@@ -220,6 +331,18 @@ impl App {
         }
     }
 
+    /// Runs the quests at once: after an answer, or talking to `talked`.
+    /// Returns whether a quest heard you.
+    fn run_quests_now(&mut self, talked: Option<String>) -> bool {
+        let t = Tick {
+            on_foot: self.on_foot(),
+            talked,
+        };
+        let heard = self.quests.tick(&mut self.world, &t);
+        self.place_people();
+        heard
+    }
+
     /// Does what touching something on the deck does.
     fn use_thing(&mut self, u: Use) {
         log::info!("on foot: use {u:?}");
@@ -248,6 +371,14 @@ impl App {
                     self.world.credits += l.credits;
                     said.push(format!("{} cr from the console", l.credits));
                     l.credits = 0;
+                }
+                if l.item {
+                    if let Some(it) = deck.item.take() {
+                        said.push(it.clone());
+                        log::info!("found {it} aboard");
+                        self.world.items.push(it);
+                    }
+                    l.item = false;
                 }
                 if let Some((g, n)) = l.cargo {
                     let got = self.world.take_cargo(g, n);
@@ -283,6 +414,23 @@ impl App {
                 } else {
                     format!("\u{201c}That's {cost} cr of work. Come back when you have it.\u{201d}")
                 });
+            }
+            Use::Talk(i) if self.deck.as_ref().and_then(|d| d.named_id(i)).is_some() => {
+                let id = self
+                    .deck
+                    .as_ref()
+                    .and_then(|d| d.named_id(i))
+                    .unwrap_or_default()
+                    .to_string();
+                if !self.run_quests_now(Some(id.clone())) {
+                    let (name, idle) = self.quests.idle_line(&id).unwrap_or_default();
+                    let idle = if idle.is_empty() {
+                        "They nod, and say nothing.".to_string()
+                    } else {
+                        format!("\u{201c}{idle}\u{201d}")
+                    };
+                    self.dock_note = Some(format!("{name}: {idle}"));
+                }
             }
             Use::Talk(i) => {
                 let Some(n) = self.deck.as_ref().map(|d| d.npcs[i].clone()) else { return };
@@ -458,7 +606,24 @@ mod tests {
     use ratatui::crossterm::event::KeyCode;
 
     fn app(w: World) -> App {
-        App { world: w, screen: Screen::Flight, map_sector: false, map_sel: 0, dock_row: 0, dock_tab: 0, yard_row: 0, job_row: 0, dock_note: None, saved: None, demo: false, ask_quit: false, hailing: None, deck: None }
+        App {
+            world: w,
+            screen: Screen::Flight,
+            map_sector: false,
+            map_sel: 0,
+            dock_row: 0,
+            dock_tab: 0,
+            yard_row: 0,
+            job_row: 0,
+            dock_note: None,
+            saved: None,
+            demo: false,
+            ask_quit: false,
+            hailing: None,
+            deck: None,
+            quests: Quests::new(Vec::new()),
+            quest_wait: 0,
+        }
     }
 
     #[test]
@@ -488,6 +653,184 @@ mod tests {
         assert_eq!(a.world.phase, Phase::Flying);
         assert_eq!(a.screen, Screen::Flight);
         assert!(a.deck.is_none());
+    }
+
+    /// Reads every line shown, and answers questions with `pick`.
+    fn read_all(a: &mut App, pick: char) {
+        for _ in 0..20 {
+            match a.quests.talk.front() {
+                None => return,
+                Some(t) if t.choices.is_empty() => a.menu_key(KeyEvent::from(KeyCode::Enter)),
+                Some(_) => a.menu_key(KeyEvent::from(KeyCode::Char(pick))),
+            }
+        }
+        panic!("the talking never stopped");
+    }
+
+    /// Stands beside the quest's person and presses Enter.
+    fn talk_to(a: &mut App, id: &str) {
+        let deck = a.deck.as_mut().expect("on foot");
+        let i = (0..deck.npcs.len())
+            .find(|&i| deck.named_id(i) == Some(id))
+            .unwrap_or_else(|| panic!("{id} is on the deck"));
+        let (x, y) = (deck.npcs[i].x, deck.npcs[i].y);
+        deck.you = [
+            (x - 1, y),
+            (x + 1, y),
+            (x, y - 1),
+            (x, y + 1),
+            (x - 1, y - 1),
+            (x + 1, y + 1),
+            (x - 1, y + 1),
+            (x + 1, y - 1),
+        ]
+        .into_iter()
+        .find(|&(px, py)| {
+            deck.tile(px, py) == crate::sim::deck::Tile::Floor && deck.npc_at(px, py).is_none()
+        })
+        .expect("room beside them");
+        assert_eq!(deck.nearby(), Some(Use::Talk(i)));
+        a.menu_key(KeyEvent::from(KeyCode::Enter));
+    }
+
+    fn frames(a: &mut App, n: u32) {
+        for _ in 0..n {
+            a.world
+                .update(&crate::sim::ship::Intent::default(), 1.0 / 60.0);
+            a.follow();
+            a.tick_quests();
+        }
+    }
+
+    #[test]
+    fn the_jumped_claim_plays_from_the_bar_to_the_hold_and_back() {
+        let mut a = app(World::new(7));
+        a.screen = Screen::Base;
+        a.quests = Quests::built_in();
+        a.quests.tick(
+            &mut a.world,
+            &Tick {
+                on_foot: true,
+                talked: None,
+            },
+        );
+        a.go_aboard();
+        assert_eq!(
+            a.deck.as_ref().unwrap().named.len(),
+            1,
+            "Ilta waits in Routa's bar"
+        );
+        assert!(a.quests.journal().any(|q| q.title == "The Jumped Claim"));
+        talk_to(&mut a, "ilta");
+        assert_eq!(
+            a.quests.talk.front().map(|t| t.who.as_str()),
+            Some("Ilta Rask")
+        );
+        read_all(&mut a, '1');
+        assert_eq!(a.quests.states[0].stage, "hunt");
+        // saved and loaded mid-quest
+        let saved = a.quests.save();
+        a.quests = Quests::built_in();
+        a.quests.restore(&saved);
+
+        // out to Kide Drift; the jumpers turn up after a while
+        a.world.launch();
+        a.follow();
+        a.world.enter_region_for_test(1);
+        a.world.busy = false;
+        frames(&mut a, 700);
+        let carrier = a
+            .world
+            .ships
+            .iter()
+            .position(|s| s.tag.as_deref() == Some("carrier"))
+            .expect("the Ahma came");
+        // the fight, short: the escort and anyone else gone, the Ahma knocked out
+        let pirates: Vec<usize> = (0..a.world.ships.len())
+            .filter(|&i| i != carrier && a.world.ships[i].id != crate::sim::PLAYER)
+            .collect();
+        for i in pirates {
+            a.world.ships[i].alive = false;
+        }
+        assert!(
+            a.world.knock_out(carrier, crate::sim::PLAYER),
+            "a ship carrying a quest's item is always left to board"
+        );
+        let (pos, id, vel) = (
+            a.world.ships[carrier].pos,
+            a.world.ships[carrier].id,
+            a.world.ships[carrier].vel,
+        );
+        let p = a.world.player_mut_for_test();
+        p.pos = pos + crate::sim::v2::v2(0.0, 120.0);
+        p.vel = vel;
+        a.world.target = Some(id);
+        a.world.land();
+        a.follow();
+        assert!(
+            a.deck
+                .as_ref()
+                .is_some_and(|d| d.boarding && d.item.is_some())
+        );
+        // the crew already dealt with; the beacon's crate
+        let deck = a.deck.as_mut().unwrap();
+        deck.npcs.clear();
+        let (x, y) = deck
+            .loot
+            .iter()
+            .find(|l| l.1.item)
+            .map(|l| l.0)
+            .expect("a crate holds the beacon");
+        deck.you = [(x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)]
+            .into_iter()
+            .find(|&(px, py)| deck.tile(px, py) == crate::sim::deck::Tile::Floor)
+            .unwrap();
+        a.menu_key(KeyEvent::from(KeyCode::Enter));
+        assert_eq!(a.world.items, vec!["Ilta's claim beacon".to_string()]);
+        frames(&mut a, 10);
+        assert_eq!(a.quests.states[0].stage, "home");
+        read_all(&mut a, '1');
+        // back through the hatch, home to Routa, and to the bar
+        let deck = a.deck.as_mut().unwrap();
+        deck.you = (1, deck.h / 2);
+        a.menu_key(KeyEvent::from(KeyCode::Char('h')));
+        assert_eq!(a.world.phase, Phase::Flying);
+        a.world.enter_region_for_test(0);
+        a.world.phase = Phase::Docked(0);
+        a.follow();
+        let credits = a.world.credits;
+        talk_to(&mut a, "ilta");
+        read_all(&mut a, '1');
+        assert_eq!(
+            a.quests.states[0].status,
+            crate::sim::quest::Status::Done("Ilta's claim is hers again. 1500 cr paid.".into())
+        );
+        assert_eq!(a.world.credits, credits + 1500);
+        assert!(a.world.items.is_empty());
+        frames(&mut a, 10);
+        let deck = a.deck.as_ref().unwrap();
+        assert!((0..deck.npcs.len()).all(|i| deck.named_id(i).is_none()), "she's gone home");
+    }
+
+    #[test]
+    fn people_stay_put_when_someone_else_leaves() {
+        use crate::sim::quest::Def;
+        let person = |id: &str, g: &str| format!("title = \"{id}\"\n[people.{id}]\nname = \"{id}\"\nglyph = \"{g}\"\nbase = \"Routa Station\"\nroom = \"bar\"\n");
+        let stay = "return { start = function() place('a'); wait(function() return false end) end }";
+        let go = "return { start = function() place('b'); wait_talk('b'); finish('') end }";
+        let defs = vec![Def::parse("a", &person("a", "a"), stay, "a").map_err(|e| ("a".to_string(), e)), Def::parse("b", &person("b", "b"), go, "b").map_err(|e| ("b".to_string(), e))];
+        let mut a = app(World::new(3));
+        a.quests = Quests::new(defs);
+        a.quests.tick(&mut a.world, &Tick { on_foot: true, talked: None });
+        a.go_aboard();
+        let deck = a.deck.as_ref().unwrap();
+        let spot = |d: &Deck, id: &str| (0..d.npcs.len()).find(|&i| d.named_id(i) == Some(id)).map(|i| (d.npcs[i].x, d.npcs[i].y));
+        let before = spot(deck, "a").expect("a is there");
+        assert!(spot(deck, "b").is_some());
+        talk_to(&mut a, "b");
+        let deck = a.deck.as_ref().unwrap();
+        assert_eq!(spot(deck, "b"), None, "b left");
+        assert_eq!(spot(deck, "a"), Some(before), "a never moved");
     }
 
     #[test]

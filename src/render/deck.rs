@@ -91,16 +91,127 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &App) {
             }
         }
     }
-    for n in &deck.npcs {
-        let st = if n.fight.as_ref().is_some_and(|f| f.surrendered) { fg(pal::DIM) } else { fg(pal::rgb(pal::faction(n.faction))).add_modifier(Modifier::BOLD) };
-        put(n.x, n.y, n.who.glyph(), st);
+    for (i, n) in deck.npcs.iter().enumerate() {
+        let st = if n.fight.as_ref().is_some_and(|f| f.surrendered) {
+            fg(pal::DIM)
+        } else {
+            fg(pal::rgb(pal::faction(n.faction))).add_modifier(Modifier::BOLD)
+        };
+        // a quest's person stands out: underlined
+        let st = if deck.named_id(i).is_some() {
+            st.add_modifier(Modifier::UNDERLINED)
+        } else {
+            st
+        };
+        put(n.x, n.y, deck.glyph_of(i), st);
     }
     // the one you would shoot at
     if let Some(i) = deck.in_sights(&app.world.body) {
         let n = &deck.npcs[i];
-        put(n.x, n.y, n.who.glyph(), fg(pal::TARGET).add_modifier(Modifier::BOLD | Modifier::REVERSED));
+        put(
+            n.x,
+            n.y,
+            deck.glyph_of(i),
+            fg(pal::TARGET).add_modifier(Modifier::BOLD | Modifier::REVERSED),
+        );
     }
-    put(deck.you.0, deck.you.1, '@', fg(Color::White).add_modifier(Modifier::BOLD));
+    put(
+        deck.you.0,
+        deck.you.1,
+        '@',
+        fg(Color::White).add_modifier(Modifier::BOLD),
+    );
+    // the talk box keeps clear of you: below you, or above if you're low
+    talk_box(
+        buf,
+        map,
+        app,
+        oy + deck.you.1 > map.y as i32 + map.height as i32 / 2,
+    );
+}
+
+/// Someone talking to you, over the bottom of the deck: their line, or
+/// their question and its numbered answers.
+fn talk_box(buf: &mut Buffer, map: Rect, app: &App, top: bool) {
+    let Some(t) = app.quests.talk.front() else {
+        return;
+    };
+    let w = map.width.saturating_sub(4).min(72);
+    if w < 20 {
+        return;
+    }
+    let inner_w = (w - 4) as usize;
+    let mut lines: Vec<Line> = wrap(&t.text, inner_w)
+        .into_iter()
+        .map(|l| Line::from(Span::styled(l, Style::default().fg(pal::TEXT))))
+        .collect();
+    lines.push(Line::from(""));
+    for (k, c) in t.choices.iter().enumerate() {
+        for (j, l) in wrap(c, inner_w - 3).into_iter().enumerate() {
+            let head = if j == 0 {
+                format!("{} ", k + 1)
+            } else {
+                "  ".into()
+            };
+            lines.push(Line::from(vec![
+                Span::styled(
+                    head,
+                    Style::default()
+                        .fg(pal::TARGET)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(l, Style::default().fg(pal::TEXT)),
+            ]));
+        }
+    }
+    let more = app.quests.talk.len() > 1;
+    let hint = match (t.choices.len(), more) {
+        (0, true) => "Enter: more".to_string(),
+        (0, false) => "Enter".to_string(),
+        (n, _) => format!("1–{n} answer"),
+    };
+    lines.push(Line::from(Span::styled(
+        hint,
+        Style::default().fg(pal::DIM),
+    )));
+    let h = (lines.len() as u16 + 2).min(map.height);
+    let y = if top {
+        map.y
+    } else {
+        map.bottom().saturating_sub(h).max(map.y)
+    };
+    let area = Rect::new(map.x + (map.width - w) / 2, y, w, h);
+    Clear.render(area, buf);
+    let block = frame(&t.who);
+    let inner = block.inner(area);
+    block.render(area, buf);
+    buf.set_style(area, Style::default().bg(pal::CHROME_BG));
+    let inner = Rect::new(
+        inner.x + 1,
+        inner.y,
+        inner.width.saturating_sub(2),
+        inner.height,
+    );
+    Paragraph::new(lines).render(inner, buf);
+}
+
+/// Words, wrapped to `width` columns.
+pub fn wrap(text: &str, width: usize) -> Vec<String> {
+    let mut out = Vec::new();
+    for para in text.split('\n') {
+        let mut cur = String::new();
+        for word in para.split(' ') {
+            if !cur.is_empty() && cur.chars().count() + 1 + word.chars().count() > width {
+                out.push(std::mem::take(&mut cur));
+            }
+            if !cur.is_empty() {
+                cur.push(' ');
+            }
+            cur.push_str(word);
+        }
+        out.push(cur);
+    }
+    out
 }
 
 /// The bar under the deck: what is beside you, and the last thing said.
@@ -115,7 +226,18 @@ pub fn bottom(buf: &mut Buffer, area: Rect, app: &App) {
     let block = frame(&title);
     let inner = block.inner(area);
     block.render(area, buf);
+    let talking = app.quests.talk.front().map(|t| {
+        if t.choices.is_empty() {
+            "Enter to read on"
+        } else {
+            "press the number of your answer"
+        }
+    });
     let line = match (&app.dock_note, deck.boarding) {
+        _ if talking.is_some() => Line::from(Span::styled(
+            talking.unwrap_or_default(),
+            Style::default().fg(pal::DIM),
+        )),
         (Some(n), _) => Line::from(Span::styled(n.clone(), Style::default().fg(pal::TARGET))),
         (None, true) => Line::from(Span::styled("F fire · walk into crew to fight, crates to loot · M medkit · < back to your ship", Style::default().fg(pal::DIM))),
         (None, false) => Line::from(Span::styled("arrows, WASD or hjkl walk · Enter talks or uses · walk into counters · F save · Esc quit", Style::default().fg(pal::DIM))),
@@ -152,20 +274,7 @@ fn board_side(buf: &mut Buffer, area: Rect, app: &App, deck: &Deck) {
     let room = inner.height.saturating_sub(lines.len() as u16) as usize;
     let width = inner.width as usize;
     // the log, newest at the bottom, wrapped to the panel
-    let mut wrapped: Vec<String> = Vec::new();
-    for l in &deck.log {
-        let mut cur = String::new();
-        for word in l.split(' ') {
-            if !cur.is_empty() && cur.chars().count() + 1 + word.chars().count() > width {
-                wrapped.push(std::mem::take(&mut cur));
-            }
-            if !cur.is_empty() {
-                cur.push(' ');
-            }
-            cur.push_str(word);
-        }
-        wrapped.push(cur);
-    }
+    let wrapped: Vec<String> = deck.log.iter().flat_map(|l| wrap(l, width)).collect();
     let skip = wrapped.len().saturating_sub(room);
     let n = wrapped.len();
     for (k, l) in wrapped.into_iter().enumerate().skip(skip) {

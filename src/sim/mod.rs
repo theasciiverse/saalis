@@ -10,6 +10,7 @@ pub mod deck;
 pub mod econ;
 pub mod faction;
 pub mod mission;
+pub mod quest;
 pub mod rng;
 pub mod save;
 pub mod shipyard;
@@ -151,6 +152,24 @@ pub enum Phase {
     Boarding(u32),
 }
 
+/// What a quest asks `World::spawn_tagged` for.
+#[derive(Clone, Debug)]
+pub struct Tagged {
+    pub tag: String,
+    pub class: &'static Class,
+    pub side: Side,
+    /// for patrols and traders; pirates are always claim-jumpers
+    pub faction: Faction,
+    pub count: u32,
+    pub callsign: Option<String>,
+    pub item: Option<String>,
+    /// already knocked out, waiting to be boarded
+    pub wreck: bool,
+    pub skill: f32,
+    /// how far from you they appear
+    pub distance: f32,
+}
+
 /// A place in the current region to fly to.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Nav {
@@ -196,6 +215,8 @@ pub struct World {
     pub body: body::Body,
     /// the ship you were killed aboard, if that is how it ended
     pub lost_aboard: Option<String>,
+    /// what quests have handed you or you found for them, by name
+    pub items: Vec<String>,
     pub next_mission: u32,
     /// what the player paid per unit, on average, for what is in the hold
     pub paid: [u32; econ::N],
@@ -279,6 +300,7 @@ impl World {
             fixer: None,
             body: body::Body::default(),
             lost_aboard: None,
+            items: Vec::new(),
             next_mission: 0,
             paid: [0; econ::N],
             ships: Vec::new(),
@@ -339,6 +361,16 @@ impl World {
         self.autopilot = false;
         let threat = self.war.threat(&self.sector, r);
         self.encounter_t = if threat == 0 { f32::INFINITY } else { self.rng.range(40.0, 110.0) / threat as f32 };
+    }
+
+    #[cfg(test)]
+    pub fn enter_region_for_test(&mut self, r: usize) {
+        self.enter_region(r);
+    }
+
+    #[cfg(test)]
+    pub fn player_mut_for_test(&mut self) -> &mut Ship {
+        self.player_mut().expect("the player's ship")
     }
 
     pub fn region_name(&self) -> &'static str {
@@ -951,7 +983,15 @@ impl World {
             Side::Trader => 50 + self.rng.below(250),
             _ => self.rng.below(100),
         };
-        Some(deck::Boarding { size, faction: s.faction, crew_kind, crew, cargo, credits })
+        Some(deck::Boarding {
+            size,
+            faction: s.faction,
+            crew_kind,
+            crew,
+            cargo,
+            credits,
+            item: s.item.clone(),
+        })
     }
 
     /// Takes up to `n` of good `g` into the hold; returns how many fitted.
@@ -1623,7 +1663,8 @@ impl World {
     /// It counts as a kill now; blowing it up later pays nothing more.
     pub fn knock_out(&mut self, i: usize, by: u32) -> bool {
         let s = &self.ships[i];
-        if s.id == PLAYER || s.disabled || !self.rng.chance(DISABLE_CHANCE) {
+        // a ship carrying a quest's item is always left to be boarded
+        if s.id == PLAYER || s.disabled || !(s.item.is_some() || self.rng.chance(DISABLE_CHANCE)) {
             return false;
         }
         let s = &mut self.ships[i];
@@ -1878,6 +1919,90 @@ impl World {
             self.ships.push(s);
         }
         log::info!("{:?} {:?} passing through {}", side, faction, self.region_name());
+    }
+
+    /// Ships a quest asks for, near you; returns how many came. Only while
+    /// flying: docking and lanes clear the field.
+    pub fn spawn_tagged(&mut self, q: &Tagged) -> u32 {
+        if self.phase != Phase::Flying {
+            return 0;
+        }
+        let Some(me) = self.player() else { return 0 };
+        let centre = me.pos;
+        let bearing = self.rng.range(-3.14, 3.14);
+        let at = centre + V2::from_heading(bearing) * q.distance;
+        let n = q.count.clamp(1, 8);
+        for k in 0..n {
+            let id = self.next_id;
+            self.next_id += 1;
+            let offset = V2::from_heading(bearing + 1.57) * ((k as f32 - n as f32 / 2.0) * 180.0);
+            let pos = at + offset;
+            let heading = (centre - pos).heading();
+            let callsign = match &q.callsign {
+                Some(c) if n == 1 => c.clone(),
+                Some(c) => format!("{c} {}", k + 1),
+                None => format!("{} {}", q.class.name, callsign(&mut self.rng)),
+            };
+            let mut s = Ship::new(id, q.class, q.side, callsign, pos, heading);
+            s.faction = if q.side == Side::Pirate {
+                Faction::Pirates
+            } else {
+                q.faction
+            };
+            s.tag = Some(q.tag.clone());
+            // the item rides with the first of them
+            s.item = if k == 0 { q.item.clone() } else { None };
+            if q.wreck {
+                // dead in space already: drifting, open to boarding
+                s.vel = V2::from_heading(heading) * 5.0;
+                s.set_speed = 0.0;
+                s.hull = 1.0;
+                s.disabled = true;
+                self.ships.push(s);
+                continue;
+            }
+            s.vel = V2::from_heading(heading) * q.class.max_speed * 0.6;
+            s.kit.launcher = q.class.size != Size::Light && q.side != Side::Trader;
+            s.kit.seekers = if s.kit.launcher { 2 } else { 0 };
+            s.kit.turret = q.class.size == Size::Heavy || q.side == Side::Trader;
+            let brain = match q.side {
+                Side::Trader => {
+                    let goal = self.navs().first().map(|&n| self.nav_pos(n));
+                    Brain::new(q.skill, 1.0).with_role(Role::Trader, goal)
+                }
+                Side::Patrol => Brain::new(q.skill, 0.25).with_role(Role::Fighter, Some(centre)),
+                _ => Brain::new(
+                    q.skill,
+                    if q.class.size == Size::Heavy {
+                        0.0
+                    } else {
+                        0.3
+                    },
+                ),
+            };
+            self.brains.insert(id, brain);
+            self.ships.push(s);
+        }
+        if q.side == Side::Pirate && !q.wreck {
+            self.cues.push(Cue::Contact);
+        }
+        log::info!(
+            "quest ships '{}': {n} {} ({:?}) in {}",
+            q.tag,
+            q.class.name,
+            q.side,
+            self.region_name()
+        );
+        n
+    }
+
+    /// Ships with a quest's tag: (still flying or drifting, knocked out).
+    pub fn tagged(&self, tag: &str) -> (u32, u32) {
+        let mine = self
+            .ships
+            .iter()
+            .filter(|s| s.alive && s.tag.as_deref() == Some(tag));
+        mine.fold((0, 0), |(a, d), s| (a + 1, d + u32::from(s.disabled)))
     }
 
     /// The make-up of the `n`th encounter in a region of `threat`.

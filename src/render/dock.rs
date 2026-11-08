@@ -44,6 +44,12 @@ pub fn side(buf: &mut Buffer, side: Rect, app: &App) {
         let col = if v <= crate::sim::faction::HOSTILE { Color::Rgb(240, 110, 100) } else { pal::rgb(pal::faction(f)) };
         lines.push(Line::from(vec![Span::styled(format!("{:<18}", f.name()), Style::default().fg(col)), Span::styled(word, dim)]));
     }
+    let room = (inner.height as usize).saturating_sub(lines.len() + 1);
+    let quests = super::journal::lines(app, inner.width as usize, false, room);
+    if !quests.is_empty() {
+        lines.push(Line::from(""));
+        lines.extend(quests);
+    }
 
     Paragraph::new(lines).render(inner, buf);
 }
@@ -148,6 +154,11 @@ fn board(buf: &mut Buffer, area: Rect, app: &App) {
         let room = width.saturating_sub(tail.len() + 1);
         let d: String = m.describe(&w.sector).chars().take(room).collect();
         rows.push(Line::from(vec![Span::styled(format!("{d:<room$}"), text), Span::styled(format!(" {tail}"), text)]));
+    }
+    let quests = super::journal::lines(app, width, true, (area.height as usize).saturating_sub(rows.len() + 6));
+    if !quests.is_empty() {
+        rows.push(Line::from(""));
+        rows.extend(quests);
     }
     rows.push(Line::from(""));
     for (k, g) in Guild::ALL.iter().enumerate() {

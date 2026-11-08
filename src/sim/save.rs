@@ -39,11 +39,21 @@ pub struct Save {
     /// you on foot (0.7; older saves get the starting kit)
     #[serde(default)]
     pub body: super::body::Body,
+    /// what quests gave you (0.8)
+    #[serde(default)]
+    pub items: Vec<String>,
+    /// the quests' progress (0.8), filled in by the app
+    #[serde(default)]
+    pub quests: Vec<super::quest::Saved>,
 }
 
 /// Where saves live: `SAALIS_DATA_DIR`, or the platform's data folder.
 pub fn dir() -> Option<PathBuf> {
-    if let Some(d) = std::env::var_os("SAALIS_DATA_DIR") {
+    // tests never touch a player's saves (a test once overwrote one)
+    if cfg!(test) {
+        return None;
+    }
+    if let Some(d) = std::env::var_os("SAALIS_DATA_DIR").filter(|d| !d.is_empty()) {
         return Some(PathBuf::from(d));
     }
     if cfg!(windows) {
@@ -89,6 +99,8 @@ impl World {
             next_mission: self.next_mission,
             war: self.war.clone(),
             body: self.body.clone(),
+            items: self.items.clone(),
+            quests: Vec::new(),
         })
     }
 
@@ -117,6 +129,7 @@ impl World {
         w.rating = s.rating;
         w.next_mission = s.next_mission;
         w.body = s.body;
+        w.items = s.items;
         if s.war.control.len() == w.sector.regions.len() {
             w.war = s.war;
         }

@@ -64,8 +64,8 @@ it. The broker's counter opens the exchange, the guild office's terminals
 the mission boards, the yard master's counter the shipyard, the fixer in
 the bar their job; the mechanic beside your ship repairs it, and walking
 into your ship launches. Enter talks to or uses whatever is beside you;
-walking into a passer-by squeezes past them. At the exchange ↑ ↓ choose a good, B or →
-buys, S or ← sells (Shift for ten). On the boards and in the bar A takes a
+walking into a passer-by squeezes past them. At the exchange ↑ ↓ choose
+a good, B or → buys, S or ← sells (Shift for ten). On the boards and in the bar A takes a
 job, and 1 or 2 joins a guild. Esc steps away from a counter. F saves;
 every landing saves the game, and C on the title continues it.
 
@@ -79,6 +79,13 @@ the hatch (`<`) to cast off; the wreck is scuttled behind you. Boarding a
 lawful ship is piracy. Sidearms, vests and medkits are sold at
 outfitters; a landing heals you. `--board` starts a new game already
 clamped onto a disabled raider.
+
+Quests: some people on the decks have a story to tell. They stand
+underlined; talk to them with Enter. Their lines come up in a box: Enter
+reads on, and a question is answered with its number. What each quest
+asks of you next is in the journal beside the deck, on the nav map and on
+the mission boards. Quests are written in Lua, and you can write your own:
+see `QUESTS.md`.
 
 Gamepad: the left stick turns and throttles, A fires, B burns, the right
 bumper picks the next target, the left bumper the nearest, Start pauses.

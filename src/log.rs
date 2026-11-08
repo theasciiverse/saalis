@@ -9,7 +9,7 @@ use std::io::Write;
 use std::path::PathBuf;
 
 fn dir() -> Option<PathBuf> {
-    if let Some(d) = std::env::var_os("SAALIS_LOG_DIR") {
+    if let Some(d) = std::env::var_os("SAALIS_LOG_DIR").filter(|d| !d.is_empty()) {
         return Some(PathBuf::from(d));
     }
     if cfg!(windows) {

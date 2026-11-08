@@ -301,6 +301,7 @@ fn run(terminal: &mut DefaultTerminal, kitty: bool, args: &Args, mut audio: audi
                 // the map is a glance: the field plays on behind it
                 app.world.update(&intent, DT);
                 app.follow();
+                app.tick_quests();
             }
             input.menu = app.in_menu();
             if input.menu {

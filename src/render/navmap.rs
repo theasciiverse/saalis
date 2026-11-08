@@ -129,6 +129,11 @@ fn region(buf: &mut Buffer, map: Rect, list: Rect, app: &App, aspect: f32) {
             lines.push(Line::from(vec![Span::styled(d, Style::default().fg(pal::TEXT)), Span::styled(format!(" {left}"), Style::default().fg(pal::DIM))]));
         }
     }
+    let quests = super::journal::lines(app, list.width as usize, false, (list.height as usize).saturating_sub(lines.len() + 1));
+    if !quests.is_empty() {
+        lines.push(Line::from(""));
+        lines.extend(quests);
+    }
     Paragraph::new(lines).render(list, buf);
 }
 

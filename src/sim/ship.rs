@@ -265,6 +265,11 @@ pub static HAUKKA: Class = Class {
 /// Hulls a shipyard sells the player, with prices; a trade-in fetches 60%.
 pub static PLAYER_HULLS: [(&Class, u32); 4] = [(&TIIRA, 6000), (&KUIKKA, 14000), (&LOKKI, 22000), (&HAUKKA, 30000)];
 
+/// Every hull, the player's and everyone else's.
+pub static ALL_CLASSES: [&Class; 9] = [
+    &TIIRA, &KARPPA, &AHMA, &KARHU, &KUIKKA, &LOKKI, &HAUKKA, &KOTKA, &HAAHKA,
+];
+
 /// A player hull by name, for loading a save.
 pub fn hull_named(name: &str) -> Option<&'static Class> {
     PLAYER_HULLS.iter().map(|h| h.0).find(|c| c.name == name)
@@ -443,6 +448,10 @@ pub struct Ship {
     pub alive: bool,
     /// knocked out: dead in space, drifting, and open to boarding
     pub disabled: bool,
+    /// set by a quest that spawned it, to find it again
+    pub tag: Option<String>,
+    /// something a quest put aboard, found in the hold when boarded
+    pub item: Option<String>,
 }
 
 impl Ship {
@@ -471,6 +480,8 @@ impl Ship {
             launch_cd: 0.0,
             alive: true,
             disabled: false,
+            tag: None,
+            item: None,
         }
     }
 

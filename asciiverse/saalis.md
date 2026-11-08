@@ -11,6 +11,8 @@ And keep your guns warm. Claim-jumpers work the lanes, and their fleets are taki
 - **Trade, smuggle, take contracts**: ten goods and two kinds of contraband, guild boards, fixers, deadlines.
 - **Four hulls to own** and a shipyard full of plating, plasma guns, turrets and hidden compartments.
 - **Five factions** that remember what you did: patrols that escort friends and shoot enemies, pirates who can be paid off.
+- **On foot**: walk every base in classic ASCII, from the hangar to the bar. Knock a ship out, clamp on, and fight its crew room by room for what's in the hold.
+- **Quests** written in Lua, starting with a prospector whose claim was jumped. Write your own: the game loads them from its save folder.
 
 The catch is out there. **WILL YOU TAKE IT, OR BE IT?**
 
@@ -20,7 +22,8 @@ The catch is out there. **WILL YOU TAKE IT, OR BE IT?**
 - **Space** (hold): guns; **F**: a missile (it seeks when LOCK shows); **Tab** (hold): afterburner
 - **T**: next target; **R**: the nearest hostile; **C**: hail
 - **N**: the nav map (Tab in it: the whole Reach); **[ ]**: nav points; **G**: autopilot; **J**: jump through a lane; **L**: land
-- Docked: **Tab** between the exchange, the mission boards, the bar and the shipyard
+- Docked, on foot: **arrows**, **W A S D** or **h j k l** walk; walk into a counter or a person to use them; **Enter** talks
+- Aboard a boarded ship: **F** fires, **M** uses a medkit
 - **P**: pause; **F1**: keys; **F8**: sound; **Esc**: quit
 - **Gamepad**: stick to fly, A fires, B burns, the bumpers pick targets
 
@@ -29,6 +32,7 @@ Terminals with the kitty keyboard protocol (kitty, foot, WezTerm, Ghostty) give 
 ## Options
 
 - `--play`: straight into a new game
+- `--board`: a new game, clamped onto a disabled raider
 - `--demo`: the game plays itself; any key quits
 - `--seed N`: the same Reach every time
 - `--mute`: no sound
