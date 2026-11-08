@@ -63,8 +63,8 @@ and the numpad go diagonally), and walking into someone or something uses
 it. The broker's counter opens the exchange, the guild office's terminals
 the mission boards, the yard master's counter the shipyard, the fixer in
 the bar their job; the mechanic beside your ship repairs it, and walking
-into your ship launches. Enter uses whatever is beside you; walking into a
-passer-by twice squeezes past. At the exchange ↑ ↓ choose a good, B or →
+into your ship launches. Enter talks to or uses whatever is beside you;
+walking into a passer-by squeezes past them. At the exchange ↑ ↓ choose a good, B or →
 buys, S or ← sells (Shift for ten). On the boards and in the bar A takes a
 job, and 1 or 2 joins a guild. Esc steps away from a counter. F saves;
 every landing saves the game, and C on the title continues it.

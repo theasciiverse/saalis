@@ -256,8 +256,6 @@ pub struct Deck {
     pub you: (i32, i32),
     /// the top-left of the ship's footprint
     pub ship_at: (i32, i32),
-    /// the person you last walked into: walk into them again to squeeze past
-    bumped: Option<usize>,
     rng: Rng,
     /// aboard someone else's ship, not walking a base
     pub boarding: bool,
@@ -343,20 +341,19 @@ impl Deck {
             return Step::Acted;
         }
         if let Some(u) = self.use_at(x, y) {
-            // the second push past someone idling swaps places with them
+            // someone idling is never in the way: you squeeze past (Enter
+            // talks to them)
             if let Use::Talk(i) = u {
-                if self.bumped == Some(i) && self.npcs[i].who.wanders() {
+                if self.npcs[i].who.wanders() {
                     let me = self.you;
                     self.you = (x, y);
                     self.npcs[i].x = me.0;
                     self.npcs[i].y = me.1;
                     // it wanders wherever it was pushed to
                     self.npcs[i].room = self.room_at(me.0, me.1);
-                    self.bumped = None;
                     self.turn(body);
                     return Step::Moved;
                 }
-                self.bumped = Some(i);
             }
             return Step::Bump(u);
         }
@@ -366,7 +363,6 @@ impl Deck {
             return Step::Blocked;
         }
         self.you = (x, y);
-        self.bumped = None;
         self.turn(body);
         Step::Moved
     }
@@ -419,7 +415,7 @@ impl Deck {
             }
         }
         let w = end + 1;
-        let mut d = Deck { w, h: H, boarding: false, loot: Vec::new(), log: Vec::new(), tiles: vec![Tile::Void; (w * H) as usize], room_of: vec![NONE; (w * H) as usize], rooms: Vec::new(), npcs: Vec::new(), you: (0, 0), ship_at: (0, 0), bumped: None, rng };
+        let mut d = Deck { w, h: H, boarding: false, loot: Vec::new(), log: Vec::new(), tiles: vec![Tile::Void; (w * H) as usize], room_of: vec![NONE; (w * H) as usize], rooms: Vec::new(), npcs: Vec::new(), you: (0, 0), ship_at: (0, 0), rng };
 
         // the hangar
         d.room(Place::Hangar, hangar_name(spec.kind), 0, 0, HANGAR_W - 1, H - 1);
@@ -509,16 +505,16 @@ impl Deck {
         let (ix0, ix1) = (x0 + 1, x1 - 1);
         let far = if above { y0 + 1 } else { y1 - 1 };
         let toward = if above { 1 } else { -1 };
-        let mid_x = (ix0 + ix1) / 2;
         match place {
             Place::Exchange | Place::Yard => {
-                for x in ix0..=ix1 {
+                // a flap at the end, so the room behind the counter is open
+                for x in ix0..ix1 {
                     self.put(x, far + toward, Tile::Counter);
                 }
                 self.put(ix0, far, Tile::Crate);
-                self.put(ix1, far, Tile::Crate);
                 let who = if place == Place::Exchange { Who::Broker } else { Who::Yardmaster };
-                self.person(mid_x, far, who, spec.owner, id);
+                // at the far end, so they never cut the strip behind in two
+                self.person(ix0 + 1, far, who, spec.owner, id);
                 if place == Place::Yard {
                     for x in [ix0, ix0 + 1, ix1] {
                         self.put(x, far + 3 * toward, Tile::Crate);
@@ -536,7 +532,7 @@ impl Deck {
                 for x in ix0..=bar_end {
                     self.put(x, far + toward, Tile::Counter);
                 }
-                self.person(ix0 + 2, far, Who::Barkeep, spec.owner, id);
+                self.person(ix0, far, Who::Barkeep, spec.owner, id);
                 let row = far + 3 * toward;
                 for x in [ix0 + 2, ix0 + 7, ix1 - 2] {
                     self.put(x, row, Tile::Table);
@@ -609,7 +605,7 @@ impl Deck {
         }
         rooms.push(("cockpit", 9));
         let w = rooms.iter().map(|r| r.1 - 1).sum::<i32>() + 1;
-        let mut d = Deck { w, h: SHIP_H, boarding: true, loot: Vec::new(), log: Vec::new(), tiles: vec![Tile::Void; (w * SHIP_H) as usize], room_of: vec![NONE; (w * SHIP_H) as usize], rooms: Vec::new(), npcs: Vec::new(), you: (2, SHIP_H / 2), ship_at: (0, 0), bumped: None, rng };
+        let mut d = Deck { w, h: SHIP_H, boarding: true, loot: Vec::new(), log: Vec::new(), tiles: vec![Tile::Void; (w * SHIP_H) as usize], room_of: vec![NONE; (w * SHIP_H) as usize], rooms: Vec::new(), npcs: Vec::new(), you: (2, SHIP_H / 2), ship_at: (0, 0), rng };
         let mut x0 = 0;
         for &(name, rw) in &rooms {
             let place = if name == "hold" { Place::Hall } else { Place::Hangar };
@@ -663,7 +659,8 @@ impl Deck {
                 let y = 1 + d.rng.below(SHIP_H as u32 - 2) as i32;
                 if d.tile(x, y) == Tile::Floor && d.npc_at(x, y).is_none() {
                     let (hp, arm, soak, quit_at) = match b.crew_kind {
-                        0 => (20, d.rng.below(3) as u8, d.rng.below(3) as i32, 0.25),
+                        // pistols and carbines: a scattergun is a prize you buy
+                        0 => (20, d.rng.below(2) as u8, d.rng.below(3) as i32, 0.25),
                         1 => (14, 0, 0, 0.6),
                         _ => (24, 1, 4, 0.0),
                     };
@@ -836,7 +833,7 @@ impl Deck {
             }
             let arm = ARMS[(f.arm as usize).min(ARMS.len() - 1)];
             if seen && d <= arm.range {
-                if self.rng.chance(arm.aim * 0.75 - 0.04 * d as f32) {
+                if self.rng.chance(arm.aim * 0.65 - 0.04 * d as f32) {
                     let (part, k) = location(&mut self.rng);
                     let raw = ((self.rng.below((arm.dmg.1 - arm.dmg.0 + 1) as u32) as i32 + arm.dmg.0) as f32 * k).round() as i32;
                     let dmg = (raw - body.soak()).max(1);
@@ -986,6 +983,58 @@ mod tests {
         }
     }
 
+    /// Every floor tile, reached from where you start, with people who never
+    /// move counted as walls.
+    fn unreachable(d: &Deck) -> Vec<(i32, i32)> {
+        // crew move, and can be fought: only staff count as walls
+        let still = |x, y| d.npcs.iter().any(|n| n.x == x && n.y == y && !n.who.wanders() && n.fight.is_none());
+        let mut seen = vec![d.you];
+        let mut i = 0;
+        while i < seen.len() {
+            let (x, y) = seen[i];
+            for (dx, dy) in [(0, -1), (1, 0), (0, 1), (-1, 0)] {
+                let p = (x + dx, y + dy);
+                if d.tile(p.0, p.1).open() && !still(p.0, p.1) && !seen.contains(&p) {
+                    seen.push(p);
+                }
+            }
+            i += 1;
+        }
+        let mut out = Vec::new();
+        for y in 0..d.h {
+            for x in 0..d.w {
+                if d.tile(x, y) == Tile::Floor && !still(x, y) && !seen.contains(&(x, y)) {
+                    out.push((x, y));
+                }
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn no_floor_is_walled_off() {
+        let mut bad = Vec::new();
+        for kind in [BaseKind::Hub, BaseKind::Mine, BaseKind::Refinery, BaseKind::Farm, BaseKind::Clinic, BaseKind::Customs] {
+            for seed in 1..200 {
+                let d = Deck::build(&spec(kind), seed);
+                let u = unreachable(&d);
+                if !u.is_empty() {
+                    bad.push(format!("{kind:?} seed {seed}: {} tiles, e.g. {:?} in {:?}", u.len(), u[0], d.rooms.get(d.room_at(u[0].0, u[0].1) as usize).map(|r| r.name)));
+                }
+            }
+        }
+        for seed in 1..200 {
+            for size in 0..3 {
+                let d = Deck::board(&Boarding { size, faction: Faction::Pirates, crew_kind: 0, crew: 0, cargo: vec![(0, 5); 4], credits: 9 }, seed);
+                let u = unreachable(&d);
+                if !u.is_empty() {
+                    bad.push(format!("ship size {size} seed {seed}: {} tiles, e.g. {:?}", u.len(), u[0]));
+                }
+            }
+        }
+        assert!(bad.is_empty(), "{} decks walled off:\n{}", bad.len(), bad[..bad.len().min(12)].join("\n"));
+    }
+
     #[test]
     fn the_same_base_and_day_give_the_same_deck() {
         let s = spec(BaseKind::Hub);
@@ -1008,12 +1057,12 @@ mod tests {
     }
 
     #[test]
-    fn a_second_push_squeezes_past_someone_in_the_way() {
+    fn walking_into_someone_idle_squeezes_past() {
         let mut d = Deck::build(&spec(BaseKind::Hub), 9);
         d.npcs.retain(|n| !n.who.wanders());
         d.npcs.push(Npc { x: d.you.0 + 1, y: d.you.1, who: Who::Patron(0), faction: Faction::Coop, room: CORRIDOR, fight: None });
         let start = d.you;
-        assert!(matches!(d.step(1, 0, &mut Body::default()), Step::Bump(Use::Talk(_))));
+        assert_eq!(d.nearby(), Some(Use::Talk(d.npcs.len() - 1)), "Enter would talk");
         assert_eq!(d.step(1, 0, &mut Body::default()), Step::Moved);
         assert_eq!(d.you, (start.0 + 1, start.1));
     }
@@ -1118,5 +1167,52 @@ mod tests {
         assert_eq!(d.take_loot(x, y), Some(l));
         assert_eq!(d.take_loot(x, y), None);
         assert_eq!(d.use_at(x, y), None, "an empty crate is just cover");
+    }
+}
+
+#[cfg(test)]
+mod odds {
+    use super::*;
+
+    /// A fighter who walks to the nearest crew, fires when they can and
+    /// heals when hurt. Returns whether it won.
+    pub fn fight(crew: u8, seed: u64, me: &mut Body) -> bool {
+        let mut d = Deck::board(&Boarding { size: 1, faction: Faction::Pirates, crew_kind: 0, crew, cargo: vec![(0, 5)], credits: 9 }, seed);
+        for _ in 0..600 {
+            if d.crew_left() == 0 {
+                return true;
+            }
+            if me.hp <= 0 {
+                return false;
+            }
+            if me.hp < 14 && me.medkits > 0 {
+                d.heal(me);
+                continue;
+            }
+            if d.fire(me) == Step::Blocked {
+                let n = d.npcs.iter().find(|n| n.hostile()).unwrap();
+                let paths = d.paths_from((n.x, n.y));
+                let (x, y) = d.you;
+                let next = [(0, -1), (1, 0), (0, 1), (-1, 0), (1, -1), (1, 1), (-1, 1), (-1, -1)].iter().filter_map(|(dx, dy)| paths.get(&(x + dx, y + dy)).map(|c| (*c, (*dx, *dy)))).min();
+                match next {
+                    Some((_, (dx, dy))) => {
+                        d.step(dx, dy, me);
+                    }
+                    None => d.turn(me),
+                }
+            }
+        }
+        false
+    }
+
+    #[test]
+    #[ignore]
+    fn odds_aboard() {
+        for crew in 1..=3 {
+            for (name, kit) in [("start", Body::default()), ("carbine+padded", Body { hp: crate::sim::body::MAX_HP, arm: 1, vest: 1, medkits: 3 })] {
+                let won = (1..401).filter(|&s| fight(crew, s, &mut kit.clone())).count();
+                println!("{crew} raiders, {name}: won {:.0}%", won as f32 / 4.0);
+            }
+        }
     }
 }

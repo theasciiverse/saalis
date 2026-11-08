@@ -118,7 +118,7 @@ pub fn bottom(buf: &mut Buffer, area: Rect, app: &App) {
     let line = match (&app.dock_note, deck.boarding) {
         (Some(n), _) => Line::from(Span::styled(n.clone(), Style::default().fg(pal::TARGET))),
         (None, true) => Line::from(Span::styled("F fire · walk into crew to fight, crates to loot · M medkit · < back to your ship", Style::default().fg(pal::DIM))),
-        (None, false) => Line::from(Span::styled("arrows, WASD or hjkl walk · walk into people to talk · F save · Esc quit", Style::default().fg(pal::DIM))),
+        (None, false) => Line::from(Span::styled("arrows, WASD or hjkl walk · Enter talks or uses · walk into counters · F save · Esc quit", Style::default().fg(pal::DIM))),
     };
     Paragraph::new(line).render(inner, buf);
 }

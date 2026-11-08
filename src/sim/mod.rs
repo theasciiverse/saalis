@@ -933,7 +933,8 @@ impl World {
             Side::Patrol => 2,
             _ => 1,
         };
-        let crew = 1 + size + self.rng.below(2) as u8 * size.min(1);
+        // one at the controls, one more per size; a heavy hull may carry a third
+        let crew = 1 + size + u8::from(size == 2 && self.rng.chance(0.5));
         let lots = match (s.side, size) {
             (Side::Trader, _) => 2 + self.rng.below(3),
             (_, 0) => 1,
