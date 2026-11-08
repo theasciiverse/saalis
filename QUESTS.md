@@ -81,7 +81,10 @@ think of each stage as a checkpoint:
 
 - Things that must happen once (paying, spawning) belong just before a
   stage returns, or behind a flag in `vars`.
-- `vars` keeps numbers, strings, true and false, and tables of these.
+- `vars` keeps numbers, strings, true and false, and tables of these:
+  lists without gaps (`{"a", "b"}`) and tables with string keys
+  (`{seen = true}`). Other keys, such as `vars.done[3] = true` with no
+  1 and 2, are lost when the game saves.
 
 ```lua
 if not vars.paid then vars.paid = true; pay(300) end
@@ -162,14 +165,22 @@ spawn{
 ```
 
 A ship carrying an item is always knocked out rather than destroyed by
-the last hit, so it can be boarded. Shooting it again after that destroys
-it, and the item with it. Ships are gone once you dock or take a lane, so
-a quest that spawns them should be ready to spawn them again: see
-`hunt` in `data/quests/claim.lua`.
+the last hit, so it can be boarded, and it doesn't leave the region
+however far you fly. Shooting the wreck, or casting off from it without
+the item, destroys it and the item with it. Pirates that are far from
+you leave the region, and every ship is gone once you dock or take a
+lane. So a quest that spawns ships should be ready to spawn them again:
+see `hunt` in `data/quests/claim.lua`.
 
 ## The sandbox
 
 Quests run in a sandbox. There is no `io`, `os`, `require`, `dofile`,
 `loadfile` or `debug`, so a quest cannot read or write files or run
-programs. `load` accepts text only. The libraries are `coroutine`,
-`table`, `string` and `math`. Memory and running time are limited.
+programs. `load` accepts text only. The libraries are `table`, `string`
+and `math`, and of `coroutine` only `yield` (the game runs each stage as
+a coroutine; a quest can't make its own). `__gc` metamethods are refused.
+Each quest has its own globals and its own copies of the libraries, so
+one quest can't change another. Memory and running time are limited.
+The time limit counts Lua's own steps, not time spent inside a single
+library call, so a monstrous string pattern on a long string can still
+stall the game.

@@ -27,7 +27,14 @@ universe of our own.
   knocked out, never destroyed, by its last hit, and the item is in a
   crate of its own when boarded. Items are saved in `World::items`. A
   broken quest (a Lua error, a runaway loop, too much memory) only stops
-  itself, and shows as broken in the journal.
+  itself, shows as broken in the journal, and is saved where it was. The
+  sandbox (after a review on 2026-11-08 found holes): no coroutines of
+  a quest's own (they ran without the time hook), no `__gc` (finalizers
+  ran without it), each quest's own globals and library copies, with the
+  shared `api` table and the string metatable behind `__metatable`. Known
+  limit: time inside one C call (a pathological string pattern) isn't
+  capped. A ship carrying a quest item is never culled as "left the
+  region".
 - **The Jumped Claim** (`data/quests/claim.*`): Ilta Rask in Routa's
   bar, whose claim beacon jumpers took. Hunt their Ahma in Kide Drift,
   board it, bring the beacon back: 1500 cr (300 up front if you ask what's

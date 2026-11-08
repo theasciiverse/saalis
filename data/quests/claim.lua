@@ -42,11 +42,14 @@ return {
     say("ilta", text.spotted)
     while true do
       if has(BEACON) > 0 then return "home" end
+      -- gone without the beacon: scuttled, shot to pieces, or left
+      -- behind at a dock or a lane. Jumpers come back to a claim.
       if alive("carrier") == 0 then
         if region() == "Kide Drift" and flying() then
-          fail(text.lost)
+          say("ilta", text.lost)
+        else
+          say("ilta", text.fled)
         end
-        say("ilta", text.fled)
         return "hunt"
       end
       pause()

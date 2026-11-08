@@ -296,15 +296,33 @@ impl Quests {
         q
     }
 
+    /// A quest's globals: its own, over the shared ones (out of reach),
+    /// with its own copies of the libraries, so changing one changes
+    /// only its own.
+    fn env(&self) -> mlua::Result<Table> {
+        let lua = &self.lua;
+        let env = lua.create_table()?;
+        let meta = lua.create_table()?;
+        meta.set("__index", self.api.clone())?;
+        meta.set("__metatable", false)?;
+        env.set_metatable(Some(meta))?;
+        for lib in ["string", "math", "table", "coroutine"] {
+            let mine = lua.create_table()?;
+            for pair in self.api.get::<Table>(lib)?.pairs::<Value, Value>() {
+                let (k, v) = pair?;
+                mine.raw_set(k, v)?;
+            }
+            env.raw_set(lib, mine)?;
+        }
+        Ok(env)
+    }
+
     /// Runs a quest's file: its own globals over the shared ones, its
     /// `text` and `vars`, and the table of stages it returns.
     fn open(&self, def: &Def) -> Result<Handles, String> {
         let lua = &self.lua;
         let go = || -> mlua::Result<Handles> {
-            let env = lua.create_table()?;
-            let meta = lua.create_table()?;
-            meta.set("__index", self.api.clone())?;
-            env.set_metatable(Some(meta))?;
+            let env = self.env()?;
             let text = lua.create_table()?;
             for (k, v) in &def.meta.text {
                 text.set(k.as_str(), v.as_str())?;
@@ -385,14 +403,17 @@ impl Quests {
             .states
             .iter()
             .zip(&self.handles)
-            .filter(|(s, _)| !matches!(s.status, Status::Broken(_)))
+            // a quest that never loaded keeps its saved entry (in `orphans`)
+            .filter(|(_, h)| h.is_some())
             .map(|(s, h)| Saved {
                 id: s.id.clone(),
                 stage: s.stage.clone(),
                 vars: h.as_ref().and_then(|h| h.env.get::<Value>("vars").ok()).map_or(serde_json::Value::Null, |v| to_json(&v, 0)),
                 objective: s.objective.clone(),
                 placed: s.placed.clone(),
-                status: s.status.clone(),
+                // one that broke as it ran is saved where it was, to go on
+                // from there once it's mended
+                status: if matches!(s.status, Status::Broken(_)) { Status::Running } else { s.status.clone() },
             })
             .collect();
         out.extend(self.orphans.iter().cloned());
@@ -408,7 +429,9 @@ impl Quests {
                 self.orphans.push(sv.clone());
                 continue;
             };
-            if matches!(self.states[i].status, Status::Broken(_)) {
+            if self.handles[i].is_none() {
+                // it didn't load: keep its progress for when it's mended
+                self.orphans.push(sv.clone());
                 continue;
             }
             let st = &mut self.states[i];
@@ -639,10 +662,11 @@ impl Quests {
                     (Some(m), None) => (1, m),
                     (Some(m), Some(n)) => (m, n),
                 };
-                if hi < lo {
-                    return Err(mlua::Error::runtime("random: the interval is empty"));
+                let span = hi as i128 - lo as i128 + 1;
+                if span < 1 || span > u32::MAX as i128 {
+                    return Err(mlua::Error::runtime("random: the interval is empty or too wide"));
                 }
-                Ok(Value::Integer(lo + w.rng.below((hi - lo + 1).min(u32::MAX as i64) as u32) as i64))
+                Ok(Value::Integer((lo as i128 + w.rng.below(span as u32) as i128) as i64))
             })?;
             set("random", random)?;
 
@@ -777,6 +801,20 @@ fn sandbox() -> mlua::Result<(Lua, Table, Table)> {
     }
     g.get::<Table>("string")?.set("dump", Value::Nil)?;
     g.get::<Table>("math")?.set("randomseed", Value::Nil)?;
+    // the string library behind ("x"):upper() can't be reached and changed
+    lua.load("getmetatable('').__metatable = false").set_mode(ChunkMode::Text).exec()?;
+    // no coroutines of a quest's own: they would run outside the time cap
+    lua.load("coroutine = { yield = coroutine.yield, isyieldable = coroutine.isyieldable }").set_mode(ChunkMode::Text).exec()?;
+    // no finalizers: they run outside the time cap, as any quest
+    lua.load(
+        "local set, rawget, type, error = setmetatable, rawget, type, error
+         setmetatable = function(t, mt)
+           if type(mt) == 'table' and rawget(mt, '__gc') ~= nil then error('__gc is not allowed in quests', 2) end
+           return set(t, mt)
+         end",
+    )
+    .set_mode(ChunkMode::Text)
+    .exec()?;
     let api = lua.create_table()?;
     for k in [
         "assert",
@@ -807,8 +845,20 @@ fn sandbox() -> mlua::Result<(Lua, Table, Table)> {
     // text only, and inside the sandbox unless given an environment
     let load = g.get::<Function>("load")?;
     let safe_api = api.clone();
-    let safe = lua.create_function(move |_, (chunk, name, _mode, env): (Value, Option<String>, Value, Option<Table>)| {
-        load.call::<Variadic<Value>>((chunk, name, "t", env.unwrap_or_else(|| safe_api.clone())))
+    let safe = lua.create_function(move |lua, (chunk, name, _mode, env): (Value, Option<String>, Value, Option<Table>)| {
+        let env = match env {
+            Some(e) => e,
+            None => {
+                // globals of its own over the shared ones, like a quest's
+                let e = lua.create_table()?;
+                let meta = lua.create_table()?;
+                meta.set("__index", safe_api.clone())?;
+                meta.set("__metatable", false)?;
+                e.set_metatable(Some(meta))?;
+                e
+            }
+        };
+        load.call::<Variadic<Value>>((chunk, name, "t", env))
     })?;
     api.set("load", safe.clone())?;
     g.set("load", safe)?;
@@ -1027,10 +1077,7 @@ hello = "You came."
     fn the_sandbox_holds() {
         let q = one("title = \"x\"", "return { start = function() wait(function() return false end) end }");
         let probe = |src: &str| -> String {
-            let env = q.lua.create_table().unwrap();
-            let meta = q.lua.create_table().unwrap();
-            meta.set("__index", q.api.clone()).unwrap();
-            env.set_metatable(Some(meta)).unwrap();
+            let env = q.env().unwrap();
             let v: Value = q.lua.load(src).set_environment(env).eval().unwrap();
             if v.is_nil() { "nil".into() } else { v.type_name().into() }
         };
@@ -1042,7 +1089,12 @@ hello = "You came."
         assert_eq!(probe("return load('return 1')()"), "integer");
         assert_eq!(probe("return load('return io')()"), "nil", "loaded text sees no more than the quest");
         assert_eq!(probe("return (load('\\27Lua\\84\\0'))"), "nil", "bytecode is refused");
-        assert_eq!(probe("return getmetatable('').__index.dump"), "nil");
+        assert_eq!(probe("return getmetatable('')"), "boolean", "the string library can't be reached through a string");
+        assert_eq!(probe("return getmetatable(_ENV)"), "boolean", "nor the shared globals");
+        assert_eq!(probe("return coroutine.wrap"), "nil", "no coroutines of a quest's own");
+        assert_eq!(probe("return coroutine.create"), "nil");
+        assert_eq!(probe("return pcall(setmetatable, {}, { __gc = function() end })"), "boolean");
+        assert_eq!(probe("local ok = pcall(setmetatable, {}, { __gc = function() end }); return ok or nil"), "nil", "no finalizers");
     }
 
     #[test]
@@ -1060,6 +1112,59 @@ hello = "You came."
         assert!(matches!(status(&q), Status::Broken(_)));
         let q = one("title = \"top\"", "while true do end");
         assert!(matches!(status(&q), Status::Broken(ref e) if e.contains("too long")), "a loop at the top of the file is stopped too");
+    }
+
+    #[test]
+    fn one_quest_cannot_change_another() {
+        let meddler = r#"return { start = function()
+            wait = function() end
+            string.rep = nil
+            pcall(function() load('pay = nil; wait = nil')() end)
+            pcall(function() getmetatable(_ENV).__index.wait = function() end end)
+            pcall(function() getmetatable('').__index.rep = nil end)
+            pause()
+          end }"#;
+        let honest = r#"return { start = function()
+            wait(function() return vars.go end)
+            pay(1)
+            finish(string.rep("x", 2))
+          end }"#;
+        let defs = vec![
+            Def::parse("m", "title = \"m\"", meddler, "m").map_err(|e| ("m".to_string(), e)),
+            Def::parse("h", "title = \"h\"", honest, "h").map_err(|e| ("h".to_string(), e)),
+        ];
+        let mut q = Quests::new(defs);
+        let mut w = World::new(1);
+        for _ in 0..3 {
+            q.tick(&mut w, &Tick::default());
+        }
+        assert_eq!(q.states[1].status, Status::Running, "still waiting, untouched");
+        q.handles[1].as_ref().unwrap().env.get::<Table>("vars").unwrap().set("go", true).unwrap();
+        q.tick(&mut w, &Tick::default());
+        assert_eq!(q.states[1].status, Status::Done("xx".into()));
+    }
+
+    #[test]
+    fn random_refuses_what_it_cannot_do() {
+        let mut w = World::new(1);
+        let mut q = one("title = \"r\"", "return { start = function() local a = random(1, 6); assert(a >= 1 and a <= 6); assert(math.random(3) <= 3); random(math.mininteger, math.maxinteger) end }");
+        q.tick(&mut w, &Tick::default());
+        assert!(matches!(status(&q), Status::Broken(ref e) if e.contains("too wide")), "{:?}", status(&q));
+    }
+
+    #[test]
+    fn a_broken_quest_keeps_its_progress() {
+        let mut w = World::new(1);
+        // broke as it ran: saved where it was
+        let mut q = one("title = \"b\"", "return { start = function() vars.k = 1; return 'two' end, two = function() error('oops') end }");
+        q.tick(&mut w, &Tick::default());
+        assert!(matches!(status(&q), Status::Broken(_)));
+        let saved = q.save();
+        assert_eq!((saved[0].stage.as_str(), &saved[0].status), ("two", &Status::Running));
+        // didn't load at all: its saved entry is kept as it was
+        let mut q2 = one("title = \"b\"", "return {");
+        q2.restore(&saved);
+        assert_eq!(q2.save(), saved);
     }
 
     #[test]
@@ -1191,6 +1296,11 @@ hello = "You came."
         q.tick(&mut w, &Tick::default());
         assert_eq!(w.tagged("jumpers"), (2, 0));
         assert_eq!(w.ships.iter().filter(|s| s.item.is_some()).count(), 1);
+        // fly far off: the others leave the region, the one with the item stays
+        w.player_mut_for_test().pos = crate::sim::v2::v2(60000.0, 60000.0);
+        w.update(&crate::sim::ship::Intent::default(), 1.0 / 60.0);
+        assert_eq!(w.tagged("jumpers").0, 1);
+        assert!(w.ships.iter().any(|s| s.item.is_some() && s.alive));
         for s in w.ships.iter_mut().filter(|s| s.tag.is_some()) {
             s.alive = false;
         }

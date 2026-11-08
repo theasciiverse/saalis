@@ -1813,7 +1813,8 @@ impl World {
         let player_pos = self.player().map(|p| p.pos);
         let arrived: HashSet<u32> = self.brains.iter().filter(|(_, b)| b.arrived).map(|(id, _)| *id).collect();
         for s in &mut self.ships {
-            if s.id == PLAYER || !s.alive {
+            // a ship carrying a quest's item stays until it's dealt with
+            if s.id == PLAYER || !s.alive || s.item.is_some() {
                 continue;
             }
             let far = player_pos.is_some_and(|p| (s.pos - p).len() > if s.side == Side::Pirate { LEAVE_RANGE } else { LEAVE_RANGE * 2.0 });
