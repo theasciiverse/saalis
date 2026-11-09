@@ -99,6 +99,12 @@ It holds every raw key, every state change, the comms, kills and waves,
 and a snapshot every 500 ms. `SAALIS_LOG=info` gives less;
 `SAALIS_LOG_DIR` puts it somewhere else.
 
+Smoke runs: `tools/run.sh [args]` starts the release build in tmux
+(socket `saalis`, session `s`) with the save and log in `target/scratch`,
+never the real folders (a test once overwrote a real save; tests can't
+now, as `save::dir()` is None under `cfg(test)`). `tools/walk.py <glyph>`
+walks `@` beside someone on a deck.
+
 Screenshots: run in tmux on a private socket (`tmux -L saalis`), then
 `capture-pane -e -p` and `../panzer/tools/ansi2png.py` (its font lacks
 Braille, so stars and the radar show as boxes there).
