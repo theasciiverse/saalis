@@ -430,6 +430,15 @@ To check at the first tagged release that carries Lua: the
 `aarch64-pc-windows-msvc` build (built on an x64 runner, so Lua's C is
 cross-compiled there).
 
+## Decisions (David, 2026-11-09)
+
+### Single-player, for now
+
+Saalis stays single-player. No network play is planned for 1.0. If it
+comes later, it would be over iroh, wired in directly (the Asciiverse
+way), and the story should decide its shape first: a co-op wingman, or
+shared prices, wars and quests between otherwise separate games.
+
 ## Open questions (David's to decide)
 
 - [ ] Subtitle and motto, if any
