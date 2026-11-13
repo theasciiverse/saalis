@@ -378,7 +378,7 @@ mod tests {
         a.quests.dismiss();
         let t = frame_of(&a, 100, 30);
         assert!(
-            t.contains("1 I'll get it back.") && t.contains("1–3 answer"),
+            t.contains("1 I'll get it back.") && t.contains("1 to 3 answer"),
             "her question and its options"
         );
         for (cw, ch) in [(20, 6), (79, 23), (80, 24), (100, 30), (160, 50), (300, 90)] {

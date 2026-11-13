@@ -168,7 +168,7 @@ fn talk_box(buf: &mut Buffer, map: Rect, app: &App, top: bool) {
     let hint = match (t.choices.len(), more) {
         (0, true) => "Enter: more".to_string(),
         (0, false) => "Enter".to_string(),
-        (n, _) => format!("1–{n} answer"),
+        (n, _) => format!("1 to {n} answer"),
     };
     lines.push(Line::from(Span::styled(
         hint,

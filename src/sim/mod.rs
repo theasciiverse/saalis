@@ -1453,9 +1453,12 @@ impl World {
         }
         let threat = self.threat() as f32;
         let Some(p) = self.player() else { return };
+        let (here, radius) = (p.pos, p.class.radius);
         let to = goal - p.pos;
         let left = to.len() - stop;
-        if left <= 0.0 {
+        // within a metre is there: closer steps are lost to f32 rounding this
+        // far out, and the autopilot would hang a hair short for ever
+        if left <= 1.0 {
             self.autopilot = false;
             let name = self.nav_name(nav);
             let (hint, speed) = match nav {
@@ -1476,7 +1479,7 @@ impl World {
             self.spawn_encounter();
             return;
         }
-        let dir = to.norm();
+        let dir = self.round_rocks(here, to.norm(), radius, left);
         if let Some(p) = self.player_mut() {
             p.heading = dir.heading();
             p.pos += dir * step;
@@ -1484,6 +1487,32 @@ impl World {
         }
         // driving takes the time flying it would have, at cruise
         self.pass_hours((step / 300.0 / 3600.0 * 60.0) as f64);
+    }
+
+    /// The autopilot's way past rocks: from `pos` heading `dir`, bends
+    /// round the nearest rock that lies across the next stretch. It once
+    /// drove straight into them and scraped the armour off.
+    fn round_rocks(&self, pos: V2, dir: V2, radius: f32, left: f32) -> V2 {
+        let ahead = left.min(1600.0);
+        let mut worst: Option<(f32, V2, f32)> = None;
+        for c in self.rocks.iter().map(|r| (r.pos, r.radius)).chain(self.bases.iter().filter(|_| left > 1500.0).map(|b| (b.pos, b.radius))) {
+            let (at, r) = c;
+            let d = at - pos;
+            let along = d.dot(dir);
+            let clear = r + radius + 120.0;
+            if along < -clear || along > ahead + clear {
+                continue;
+            }
+            let side = d - dir * along;
+            if side.len() < clear && worst.is_none_or(|w| along < w.0) {
+                worst = Some((along, side, clear));
+            }
+        }
+        let Some((_, side, clear)) = worst else { return dir };
+        // away from the rock's centre, harder the closer the line runs to it
+        let away = if side.len() > 1e-3 { side * (-1.0 / side.len()) } else { v2(-dir.y, dir.x) };
+        let push = 1.5 * (1.0 - side.len() / clear) + 0.4;
+        (dir + away * push).norm()
     }
 
     /// Whether ship `s` has a seeker lock on ship `t`.
@@ -1515,7 +1544,8 @@ impl World {
             } else {
                 s.kit.dumb -= 1;
             }
-            s.launch_cd = 1.2;
+            // pilots wait a while between missiles; the player only reloads
+            s.launch_cd = if s.id == PLAYER { 1.2 } else { 9.0 };
             let fwd = s.forward();
             self.missiles.push(Missile { pos: s.pos + fwd * (s.class.radius + 10.0), vel: s.vel + fwd * 150.0, heading: s.heading, owner: s.id, faction: s.faction, target: lock, age: 0.0 });
             log::info!("missile from {} lock={:?}", s.callsign, lock);
@@ -2008,7 +2038,9 @@ impl World {
 
     /// The make-up of the `n`th encounter in a region of `threat`.
     pub fn group(n: u32, threat: u32) -> Vec<&'static Class> {
-        let level = n.min(8) + threat * 2;
+        // the first few in a quiet region are a raider or two; it builds
+        // with every encounter and with the region's threat
+        let level = (n.min(8) + threat * 2).saturating_sub(2);
         let mut v: Vec<&'static Class> = Vec::new();
         if level >= 7 && n % 3 == 1 {
             v.push(&ship::KARHU);
@@ -2043,7 +2075,9 @@ impl World {
             s.vel = V2::from_heading(heading) * class.max_speed;
             if class.size != Size::Light {
                 s.kit.launcher = true;
-                s.kit.seekers = 2;
+                s.kit.seekers = if class.size == Size::Heavy || threat >= 3 { 2 } else { 1 };
+                // nobody fires a missile the moment they arrive
+                s.launch_cd = self.rng.range(6.0, 12.0);
             }
             s.kit.turret = class.size == Size::Heavy;
             let base = match class.size {
@@ -2097,7 +2131,11 @@ impl World {
                 p.hull,
                 self.target,
                 self.shots.len()
-            ),
+            ) + &self.target.and_then(|t| self.ship(t)).map_or(String::new(), |t| {
+                let d = t.pos - p.pos;
+                let rel = (d.heading() - p.heading + std::f32::consts::PI).rem_euclid(std::f32::consts::TAU) - std::f32::consts::PI;
+                format!(" tgt=({:.0}m,{:.0}deg,{}{})", d.len(), rel.to_degrees(), t.class.name, if t.disabled { ",out" } else { "" })
+            }),
             None => common,
         }
     }
@@ -2200,6 +2238,44 @@ mod tests {
         w.ships[0].vel = V2::ZERO;
         w.land();
         assert_eq!(w.phase, Phase::Docked(0));
+    }
+
+    #[test]
+    fn the_autopilot_reaches_every_lane_mouth() {
+        // it once hung a hair short of a mouth 11 km out, its last steps
+        // lost to f32 rounding
+        for to in [1, 2, 6, 8] {
+            let mut w = World::new(3);
+            w.launch();
+            w.busy = true;
+            w.nav = Some(Nav::Mouth(to));
+            w.toggle_autopilot();
+            w.encounter_t = f32::INFINITY;
+            fly(&mut w, 10.0);
+            assert!(!w.autopilot, "still driving to the mouth to {to}");
+        }
+    }
+
+    #[test]
+    fn the_autopilot_steers_round_rocks() {
+        // every lane of every region, from the base: no scrapes on the way
+        let s = Sector::reach();
+        for r in 0..s.regions.len() {
+            for to in s.neighbours(r) {
+                let mut w = World::new(5);
+                w.launch();
+                w.enter_region_for_test(r);
+                w.busy = true;
+                w.encounter_t = f32::INFINITY;
+                w.ships[0].pos = w.sector.mouth(r, s.neighbours(r).into_iter().find(|&x| x != to).unwrap_or(to));
+                w.nav = Some(Nav::Mouth(to));
+                w.toggle_autopilot();
+                fly(&mut w, 12.0);
+                let p = &w.ships[0];
+                assert!(!w.autopilot, "{} to {}: still driving", s.regions[r].name, s.regions[to].name);
+                assert_eq!(p.armour, ship::TIIRA.armour, "{} to {}: scraped", s.regions[r].name, s.regions[to].name);
+            }
+        }
     }
 
     #[test]

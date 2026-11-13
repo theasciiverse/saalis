@@ -178,7 +178,7 @@ pub fn think(brain: &mut Brain, me: &Ship, ships: &[Ship], obstacles: &[Obstacle
             it.burner = dist > 2500.0 && brain.skill > 0.4;
             it.fire = err < 0.06 + (1.0 - brain.skill) * 0.08 && dist < gun.range * 0.9;
             // a missile at a target held in the nose at middle range, now and then
-            it.missile = me.kit.launcher && err < 0.3 && (600.0..2500.0).contains(&dist) && me.launch_cd <= 0.0 && rng.chance(0.02);
+            it.missile = me.kit.launcher && err < 0.3 && (600.0..2500.0).contains(&dist) && me.launch_cd <= 0.0 && rng.chance(0.006);
             if dist < 160.0 + me.class.radius && closing {
                 let side = if rng.chance(0.5) { 1.0 } else { -1.0 };
                 brain.mode = Mode::Break { heading: me.heading + side * rng.range(1.4, 2.2) };

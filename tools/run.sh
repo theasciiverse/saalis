@@ -6,4 +6,4 @@ R=$(cd "$(dirname "$0")/.." && pwd)
 S=${SCRATCH:-$R/target/scratch}
 mkdir -p "$S/data" "$S/slog"
 tmux -L saalis kill-server 2>/dev/null
-tmux -L saalis new-session -d -s s -x ${W:-100} -y ${H:-30} "SAALIS_DATA_DIR='$S/data' SAALIS_LOG_DIR='$S/slog' '$R/target/release/saalis' --mute $*"
+tmux -L saalis new-session -d -s s -x ${W:-100} -y ${H:-30} "SAALIS_INPUT='${SAALIS_INPUT:-}' XDG_DATA_HOME='$S/xdata' XDG_STATE_HOME='$S/xstate' SAALIS_DATA_DIR='$S/data' SAALIS_LOG_DIR='$S/slog' '$R/target/release/saalis' --mute $*"

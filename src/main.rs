@@ -23,7 +23,7 @@ use std::time::{Duration, Instant};
 
 const TICK: Duration = Duration::from_micros(16_667);
 const DT: f32 = 1.0 / 60.0;
-const SNAPSHOT: Duration = Duration::from_millis(500);
+const SNAPSHOT: Duration = Duration::from_millis(250);
 
 const USAGE: &str = "saalis: flight, combat and trade in the Northern Reach
 

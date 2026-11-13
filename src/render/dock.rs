@@ -98,8 +98,8 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &App) {
         let stock = if !m.open[g] { " (banned)" } else if m.has(g) { "" } else { " (none)" };
         rows.push(Line::from(vec![
             Span::styled(format!("{:<17}", format!("{}{stock}", econ::GOODS[g].name)), name_st),
-            Span::styled(if m.open[g] { format!("{buy:>7}") } else { format!("{:>7}", "—") }, Style::default().fg(buy_col)),
-            Span::styled(if m.open[g] { format!("{sell:>7}") } else { format!("{:>7}", "—") }, Style::default().fg(sell_col)),
+            Span::styled(if m.open[g] { format!("{buy:>7}") } else { format!("{:>7}", "-") }, Style::default().fg(buy_col)),
+            Span::styled(if m.open[g] { format!("{sell:>7}") } else { format!("{:>7}", "-") }, Style::default().fg(sell_col)),
             Span::styled(format!("{idx:>8}"), hdr),
             Span::styled(format!("{:>7}", if held > 0 { held.to_string() } else { "·".into() }), Style::default().fg(pal::TEXT)),
             Span::styled(format!("{:>7}", if held > 0 { w.paid[g].to_string() } else { String::new() }), hdr),
@@ -222,7 +222,7 @@ fn yard(buf: &mut Buffer, area: Rect, app: &App) {
         rows.push(Line::from(Span::styled("No shipyard or outfitter here.", dim)));
     }
     for (i, o) in shop.iter().enumerate() {
-        let price = if o.price == 0 { "—".to_string() } else { format!("{} cr", o.price) };
+        let price = if o.price == 0 { "-".to_string() } else { format!("{} cr", o.price) };
         let room = width.saturating_sub(12);
         let name: String = o.name.chars().take(room).collect();
         let mut st = if o.ok { text } else { dim };

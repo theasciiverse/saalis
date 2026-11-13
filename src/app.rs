@@ -578,6 +578,7 @@ impl App {
                 let got = self.world.buy(g, want);
                 self.dock_note = Some(match got {
                     0 if self.world.cargo_room() == 0 => "The hold is full.".into(),
+                    0 if self.world.docked_market().is_some_and(|m| self.world.markets[m].has(g) && self.world.credits < self.world.markets[m].buy_price(g)) => "You can't afford one.".into(),
                     0 => "You can't buy that here now.".into(),
                     _ => format!("Bought {got} {}.", econ::GOODS[g].name.to_lowercase()),
                 });
