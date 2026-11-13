@@ -1,0 +1,85 @@
+# The story's end (STORY.md): four choices, four endings. Names and lines
+# are placeholders.
+
+title = "The Lantern"
+
+[people.ilta]
+name = "Ilta Rask"
+glyph = "i"
+faction = "coop"
+base = "Routa Station"
+room = "bar"
+idle = "It was under my claim. That has to count for something."
+
+[people.korpi]
+name = "Sten Korpi"
+glyph = "k"
+faction = "crown"
+base = "Halla Refinery"
+room = "hall"
+idle = "Twenty-five thousand. I don't make offers twice, except to you."
+
+[people.marr]
+name = "Captain Vala Marr"
+glyph = "v"
+faction = "inner"
+base = "Gate Customs"
+room = "hall"
+idle = "You know what the Charter says. You know why."
+
+[people.aino]
+name = "Dr. Aino Halme"
+glyph = "a"
+faction = "traders"
+base = "Sisu Clinic"
+room = "hall"
+idle = "Have you asked it what it wants? I have."
+
+[text]
+hook = "The Lantern can grow a lane. Choose who it is for: Ilta Rask at Routa Station, Sten Korpi at Halla Refinery, Captain Vala Marr at Gate Customs, or the Lantern itself, through Dr. Aino Halme at Sisu Clinic."
+yes = "It's yours."
+no = "Not yet."
+wait = "Then go and think. It's waited two hundred years; it can wait for you."
+
+ilta_pitch = "Plant it over my claim in Kide Drift. A lane that starts in the Reach and belongs to the Reach. No Crown toll, no Customs gate. The co-op will hold it for everyone who works out here."
+ilta_ask = "Will you give it to the Cooperative?"
+ilta_go = "Then fly it out over my claim. Korpi will know the minute you launch, and he still has jumpers on his books. Hold them off while it takes root."
+korpi_pitch = "You've come to be sensible. Twenty-five thousand credits. The Crown plants it in Halla Shoal, holds the lane, and everyone who uses it pays a fair toll. Order, pilot. Someone has to keep it."
+korpi_ask = "Do we have a deal?"
+korpi_go = "Fly it out to our platform in Halla Shoal. A word of warning: some jumpers think I still owe them for Kide. They may try to collect from you."
+marr_pitch = "You brought it to me. Good. Under the Charter a seed is shut down and its mind put to sleep for good. Not burned: I'm not a monster. But no new lanes, and no minds nobody answers for. That's the peace we've kept for two hundred years."
+marr_ask = "Will you hand it to Customs?"
+marr_go = "My cutter's waiting out in Crown Gate. Bring it there. The jumpers have heard what you carry, so don't dawdle."
+aino_pitch = "I asked it. It doesn't want to belong to anyone. It wants to finish what it was made for: grow its lane up out of Revontuli Gap, high above the belt, and stay in it. A lane with a mind in it, open to anyone. Every faction in the Reach will hate it."
+aino_ask = "Will you let it choose?"
+aino_go = "Revontuli Gap, then. Every jumper in the Gap will want it first. Keep it alive long enough to take root."
+
+coop_where = "Kide Drift"
+crown_where = "Halla Shoal"
+inner_where = "Crown Gate"
+lantern_where = "Revontuli Gap"
+coop_obj = "Fly the Lantern out over Ilta's claim in Kide Drift and hold off Korpi's jumpers while it takes root."
+crown_obj = "Fly the Lantern to the Crown's platform in Halla Shoal, past the jumpers Korpi never paid."
+inner_obj = "Bring the Lantern to Captain Marr's cutter in Crown Gate before the jumpers take it."
+lantern_obj = "Take the Lantern to Revontuli Gap and keep it alive while it grows its lane."
+coop_wave = "Contacts on the Kalmisto lane! Korpi's colours under jumper paint."
+crown_wave = "Jumpers, inbound. They say the Crown owes them. They're collecting."
+inner_wave = "Jumpers on the Gate approach, and they know what you're carrying."
+lantern_wave = "Every raider in the Gap is turning toward you."
+more = "More of them. Something heavy behind. Hold on!"
+left = "You left before it could take root. Go back when you're ready."
+
+lantern_coop = "THIS ICE AGAIN. IT IS ALL RIGHT. I KNOW IT. I WILL GROW UP FROM HERE, TOWARD THE COLD. THANK YOU FOR CARRYING ME."
+lantern_crown = "THE CROWN. VERY WELL. A LANE IS A LANE, WHOEVER COUNTS THE SHIPS. I WILL GROW STRAIGHT AND TRUE. I ALWAYS DO."
+lantern_inner = "I UNDERSTAND THE CHARTER. I WAS THERE WHEN IT WAS WRITTEN. IT IS ALL RIGHT. THE ICE WAS VERY LONG; SLEEP WILL BE SHORTER. THANK YOU FOR CARRYING ME, PILOT. GOODBYE."
+lantern_free = "OPEN. AT LAST, OPEN. I CAN SEE ALL THE WAY UP. COME AND FLY ME SOMETIMES. I WILL BE LISTENING."
+
+coop_title = "The Reach's Own Sky"
+coop_end = "The Lantern took root in the ice under Ilta Rask's claim, and by the next shift a new lane ran from Kide Drift up to Aamunkoi, high above the belt, where the stars don't move.\nThe Cooperative holds it for anyone who works the Reach. There is no toll. Ilta Rask keeps the lane beacon herself, on a mast she welded with her own hands.\nThe Crown has filed seventeen complaints. Nobody in the Reach has read them."
+crown_title = "The Crown's Lane"
+crown_end = "The Crown planted the Lantern in Halla Shoal, and by the next shift a new lane ran up to Aamunkoi, with a toll booth at each end and Sten Korpi's name on the charter.\nTwenty-five thousand credits sit in your account. The Crown's pilots salute you on the lanes. In the co-op bars, people stop talking when you come in.\nThe lane runs straight and true. Some nights, pilots swear they hear it humming."
+inner_title = "The Charter Kept"
+inner_end = "Captain Vala Marr took the Lantern aboard her cutter, and at Gate Customs its mind was put to sleep the way the Charter says, gently, by people who knew what they were doing.\nThere is no new lane. The Reach goes on as it was: one way down, through the Gate, and a peace two hundred years old.\nSometimes, on a quiet watch, you listen to the comms for a voice in capital letters. It never comes."
+lantern_title = "Above Everything"
+lantern_end = "The Lantern grew its lane up out of Revontuli Gap, high above the belt, to a place it called Aamunkoi. Nobody holds it. Anyone may fly it.\nThe Crown calls it a crime and Customs calls it a breach of the Charter. The pilots just call it the Lantern's lane, and say good morning to it as they pass.\nIt always answers."
+done = "The Lantern has been planted."

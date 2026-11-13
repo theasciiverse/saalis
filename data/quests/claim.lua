@@ -37,8 +37,8 @@ return {
     objective("Find the jumpers' Ahma in Kide Drift. Knock it out, board it (L) and take the beacon from its hold.")
     wait(function() return region() == "Kide Drift" and flying() end)
     wait_hours(0.15)
-    spawn{ tag = "carrier", class = "Ahma", callsign = "Ahma Varis", item = BEACON, skill = 0.45 }
-    spawn{ tag = "jumpers", class = "Karppa", count = 1, skill = 0.35 }
+    spawn{ tag = "carrier", class = "Ahma", callsign = "Ahma Varis", item = BEACON, skill = 0.35 }
+    spawn{ tag = "jumpers", class = "Karppa", count = 1, skill = 0.3 }
     say("ilta", text.spotted)
     while true do
       if has(BEACON) > 0 then return "home" end

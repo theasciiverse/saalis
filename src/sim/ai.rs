@@ -113,7 +113,7 @@ pub fn think(brain: &mut Brain, me: &Ship, ships: &[Ship], obstacles: &[Obstacle
     // the aim error wanders; good pilots carry less of it
     brain.jitter_t -= dt;
     if brain.jitter_t <= 0.0 {
-        let err = (1.0 - brain.skill) * 90.0;
+        let err = (1.0 - brain.skill) * 120.0;
         brain.jitter = V2 { x: rng.range(-err, err), y: rng.range(-err, err) };
         brain.jitter_t = rng.range(0.4, 1.2);
     }

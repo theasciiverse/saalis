@@ -1,0 +1,27 @@
+# A Crown side story (STORY.md). Names and lines are placeholders.
+
+title = "The Toll"
+
+[people.saga]
+name = "Saga Virta"
+glyph = "s"
+faction = "crown"
+base = "Hopea Exchange"
+room = "hall"
+idle = "The Crown remembers its friends. It keeps a list."
+
+[text]
+hook = "A Crown agent at Hopea Exchange is hiring pilots who don't ask whose side they're on."
+hello = "Saga Virta, the Crown's collections office. Don't look like that, it's honest work. A smuggler called Lokki Musta runs stims through Tuisku Belt, right under the co-op's nose, and pays no duty to anyone. The co-op won't touch him. They like his prices."
+ask = "Knock him out, board him and bring me his cargo manifest. With that, the Crown can close every buyer he has. Two and a half thousand. Interested?"
+yes = "I'll bring you his manifest."
+no = "Find another errand pilot."
+fine = "There's always another. The list stays open."
+thanks = "Tuisku Belt. He flies a fat Haahka with more guns than a freighter needs. Try not to burn the manifest."
+hunt = "Find the smuggler Lokki Musta in Tuisku Belt. Knock out its Haahka, board it and bring its cargo manifest to Saga Virta at Hopea Exchange."
+spotted = "That's Musta's Haahka. Mind the turret."
+lost = "Musta's gone, and the manifest. He'll be back on the run soon enough."
+found = "In the Haahka's cockpit: a cargo manifest, names, dates, and a great many stims."
+back = "Bring Lokki Musta's manifest to Saga Virta at Hopea Exchange."
+done1 = "Lovely. Look at all these names. Half of them buy from the co-op too. ... That's not your concern. Here's your fee."
+done = "The Crown has Lokki Musta's buyers. 2500 cr paid."

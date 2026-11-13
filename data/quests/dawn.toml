@@ -1,0 +1,36 @@
+# The story's epilogue (STORY.md), at the new lane's end. Names and lines
+# are placeholders.
+
+title = "First Light"
+
+[people.ilta]
+name = "Ilta Rask"
+glyph = "i"
+faction = "coop"
+base = "Aamunkoi Light"
+room = "bar"
+idle = "Look out the window. Go on. I'll wait."
+
+[people.saga]
+name = "Saga Virta"
+glyph = "s"
+faction = "crown"
+base = "Aamunkoi Light"
+room = "hall"
+idle = "Toll's paid on the way out, pilot. Even yours."
+
+[people.aino]
+name = "Dr. Aino Halme"
+glyph = "a"
+faction = "traders"
+base = "Aamunkoi Light"
+room = "bar"
+idle = "It talks to me every morning. I still haven't asked it everything."
+
+[text]
+hook = "A new lane runs up to Aamunkoi. Someone at Aamunkoi Light is waiting for you."
+coop = "You came up! Look at it. No ecliptic, no Gate, no Crown. Just the whole belt underneath us like a river of gravel. My crew's already found ice up here, and nobody's beacon on it. ... Here. The co-op voted you a share in the lane. It isn't much yet. It will be."
+crown = "Saga Virta, lane master for the Crown. Mr. Korpi sends his regards and this bonus, for a delivery handled with discretion. The lane is turning a profit already. Fly it any time. Toll's paid on the way out."
+lantern = "I came up the first day. I couldn't not. Listen. ... It's telling the freighters the way, one by one, like a lighthouse keeper. It asked after you. It asked me to give you this: it found it in the ice on the way up. I think it's a thank you."
+gift = "a share in the Lantern's lane"
+done = "The story of the Lantern is told. The Reach goes on."

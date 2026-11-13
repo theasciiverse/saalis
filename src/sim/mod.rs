@@ -2096,9 +2096,9 @@ impl World {
             }
             s.kit.turret = class.size == Size::Heavy;
             let base = match class.size {
-                Size::Light => 0.3,
-                Size::Medium => 0.45,
-                Size::Heavy => 0.55,
+                Size::Light => 0.25,
+                Size::Medium => 0.4,
+                Size::Heavy => 0.5,
             };
             let skill = (base + threat as f32 * 0.08 + self.encounters.min(10) as f32 * 0.02 + self.rng.range(-0.1, 0.1)).min(0.9);
             let flee_at = match class.size {
@@ -2230,6 +2230,81 @@ mod tests {
     fn fly(w: &mut World, secs: f32) {
         for _ in 0..(secs * 60.0) as usize {
             w.update(&Intent::default(), 1.0 / 60.0);
+        }
+    }
+
+    /// How a pilot of a given skill, flown by the game's own brain, fares
+    /// in a starting Tiira against the first fights. A rough look, not a
+    /// claim: `cargo test --release odds -- --ignored --nocapture`.
+    #[test]
+    #[ignore]
+    fn odds_of_the_first_fights() {
+        for (n, threat_region) in [(1, 1), (3, 1), (1, 7)] {
+            for skill in [0.4, 0.55, 0.7] {
+                let (mut won, mut hull, mut died) = (0, 0.0, 0);
+                for seed in 0..20 {
+                    let mut w = World::new(seed);
+                    w.launch();
+                    w.enter_region_for_test(threat_region);
+                    w.encounter_t = f32::INFINITY;
+                    w.encounters = n - 1;
+                    w.spawn_encounter();
+                    let mut brain = Brain::new(skill, 0.0);
+                    for _ in 0..(150 * 60) {
+                        let Some(me) = w.player().cloned() else { break };
+                        if w.hostiles().next().is_none() {
+                            break;
+                        }
+                        brain.target = w.target;
+                        let (obs, ships) = (w.obstacles(), w.ships.clone());
+                        let it = ai::think(&mut brain, &me, &ships, &obs, &mut w.rng, 1.0 / 60.0);
+                        w.update(&it, 1.0 / 60.0);
+                    }
+                    match w.player() {
+                        Some(p) if w.hostiles().next().is_none() => {
+                            won += 1;
+                            hull += p.hull;
+                        }
+                        Some(_) => {}
+                        None => died += 1,
+                    }
+                }
+                println!("encounter {n} in {}: skill {skill}: won {won}/20, died {died}, hull left {:.0}", w_name(threat_region), if won > 0 { hull / won as f32 } else { 0.0 });
+            }
+        }
+        // The Jumped Claim's fight: the Ahma Varis and one Kärppä
+        for skill in [0.4, 0.55, 0.7] {
+            let (mut won, mut died) = (0, 0);
+            for seed in 0..20 {
+                let mut w = World::new(seed);
+                w.launch();
+                w.enter_region_for_test(1);
+                w.encounter_t = f32::INFINITY;
+                let spec = |class: &'static Class, skill: f32| Tagged { tag: "t".into(), class, side: Side::Pirate, faction: Faction::Pirates, count: 1, callsign: None, item: None, wreck: false, skill, distance: 3500.0, crew: None };
+                w.spawn_tagged(&spec(&ship::AHMA, 0.45));
+                w.spawn_tagged(&spec(&ship::KARPPA, 0.35));
+                let mut brain = Brain::new(skill, 0.0);
+                for _ in 0..(150 * 60) {
+                    let Some(me) = w.player().cloned() else { break };
+                    if w.hostiles().next().is_none() {
+                        break;
+                    }
+                    if w.target.is_none() { w.nearest_target(); }
+                    brain.target = w.target;
+                    let (obs, ships) = (w.obstacles(), w.ships.clone());
+                    let it = ai::think(&mut brain, &me, &ships, &obs, &mut w.rng, 1.0 / 60.0);
+                    w.update(&it, 1.0 / 60.0);
+                }
+                match w.player() {
+                    Some(_) if w.hostiles().next().is_none() => won += 1,
+                    Some(_) => {}
+                    None => died += 1,
+                }
+            }
+            println!("the claim's fight: skill {skill}: won {won}/20, died {died}");
+        }
+        fn w_name(r: usize) -> &'static str {
+            Sector::reach().regions[r].name
         }
     }
 

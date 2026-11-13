@@ -51,7 +51,7 @@ return {
       return "cover"
     end
     wait_hours(0.05)
-    spawn{ tag = "diggers2", class = "Ahma", skill = 0.45, callsign = "Ahma Routa" }
+    spawn{ tag = "diggers2", class = "Ahma", skill = 0.4, callsign = "Ahma Routa" }
     spawn{ tag = "diggers2", class = "Karppa", skill = 0.4, callsign = "Jumper" }
     say("ilta", text.second)
     if not hold("diggers2", "Kide Drift") then

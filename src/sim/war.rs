@@ -85,6 +85,10 @@ impl War {
         // owners take back what they lost
         for r in 0..s.regions.len() {
             let owner = s.regions[r].owner;
+            // the story's region belongs to whoever the story gave it
+            if s.regions[r].hidden {
+                continue;
+            }
             if self.fleets.len() >= MAX_FLEETS || self.control[r] == owner || self.fleets.iter().any(|f| f.to == r && f.faction == owner) || !rng.chance(0.06) {
                 continue;
             }

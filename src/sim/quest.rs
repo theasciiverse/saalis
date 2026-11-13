@@ -44,7 +44,7 @@ macro_rules! quest {
 }
 
 /// The game's own quests: the story in order (STORY.md), then the side stories.
-const BUILT_IN: &[(&str, &str, &str)] = &[quest!("claim"), quest!("under"), quest!("cold"), quest!("ledger"), quest!("air"), quest!("debts"), quest!("licence")];
+const BUILT_IN: &[(&str, &str, &str)] = &[quest!("claim"), quest!("under"), quest!("cold"), quest!("ledger"), quest!("finale"), quest!("dawn"), quest!("air"), quest!("debts"), quest!("licence"), quest!("toll"), quest!("dry")];
 
 /// The game's functions, as quests call them (`PRELUDE` builds on them).
 const CALLS: &[&str] = &[

@@ -129,7 +129,8 @@ impl App {
 
     /// Whether keys go to a menu rather than to flight.
     pub fn in_menu(&self) -> bool {
-        matches!(self.screen, Screen::Map | Screen::Base | Screen::Dock | Screen::Comms)
+        // an ending's card takes the keys wherever it shows
+        self.world.ending.is_some() || matches!(self.screen, Screen::Map | Screen::Base | Screen::Dock | Screen::Comms)
     }
 
     pub fn new_game(&mut self, seed: u64) {
@@ -252,8 +253,9 @@ impl App {
 
     /// A key on the map, at the dock or on comms.
     pub fn menu_key(&mut self, k: KeyEvent) {
-        // an ending's card holds everything until Enter, Space or Esc
-        if self.world.ending.is_some() {
+        // an ending's card, once the last lines are read, holds everything
+        // until Enter, Space or Esc
+        if self.world.ending.is_some() && self.quests.talk.is_empty() {
             if matches!(k.code, KeyCode::Enter | KeyCode::Esc | KeyCode::Char(' ')) {
                 log::info!("ending card closed");
                 self.world.ending = None;
@@ -917,7 +919,7 @@ mod tests {
     }
 
     #[test]
-    fn the_story_runs_from_the_claim_to_the_lanterns_key() {
+    fn the_story_runs_from_the_claim_to_its_end() {
         use crate::sim::quest::{Saved, Status};
         let done = |s: Status| matches!(s, Status::Done(_));
         let mut a = app(World::new(11));
@@ -963,11 +965,68 @@ mod tests {
         frames(&mut a, 30);
         assert!(done(status(&a, "ledger")), "{:?}", status(&a, "ledger"));
         assert_eq!(a.world.flags.get("key").map(String::as_str), Some("true"));
+        // The Lantern: Ilta's choice, the fight over the claim, the ending
+        dock_at(&mut a, "Routa Station");
+        talk_to(&mut a, "ilta");
+        read_all(&mut a, '1');
+        assert_eq!(a.world.flags.get("choice").map(String::as_str), Some("coop"));
+        fly_in(&mut a, "Kide Drift");
+        clear(&mut a, "final1");
+        frames(&mut a, 300);
+        clear(&mut a, "final2");
+        frames(&mut a, 30);
+        assert!(done(status(&a, "finale")), "{:?}", status(&a, "finale"));
+        assert_eq!(a.world.ending.as_ref().map(|e| e.0.as_str()), Some("The Reach's Own Sky"));
+        a.menu_key(KeyEvent::from(KeyCode::Enter));
+        assert!(a.world.ending.is_none(), "Enter closes the card");
+        let dawn = a.world.sector.region_named("Aamunkoi").unwrap();
+        assert!(a.world.sector.shown(dawn) && a.world.war.control[dawn] == crate::sim::faction::Faction::Coop);
+        assert!(!a.world.items.iter().any(|i| i == "the Lantern"));
+        // First Light at the new lane's end
+        dock_at(&mut a, "Aamunkoi Light");
+        talk_to(&mut a, "ilta");
+        read_all(&mut a, '1');
+        assert!(done(status(&a, "dawn")), "{:?}", status(&a, "dawn"));
         // the side stories opened on the way, and nothing broke
         for q in &a.quests.states {
             assert!(!matches!(q.status, Status::Broken(_)), "{} broke: {:?}", q.id, q.status);
         }
         assert!(a.quests.journal().any(|q| q.title == "Licence Revoked"));
         assert!(a.quests.journal().any(|q| q.title == "Old Debts"));
+    }
+
+    #[test]
+    fn every_ending_plays_out() {
+        use crate::sim::quest::{Saved, Status};
+        for (who, base, region, ending, lane) in [
+            ("korpi", "Halla Refinery", "Halla Shoal", "crown", Some("Halla Shoal")),
+            ("marr", "Gate Customs", "Crown Gate", "inner", None),
+            ("aino", "Sisu Clinic", "Revontuli Gap", "lantern", Some("Revontuli Gap")),
+        ] {
+            let mut a = app(World::new(12));
+            a.quests = Quests::built_in();
+            let gone = |id: &str| Saved { id: id.into(), stage: "x".into(), vars: serde_json::Value::Null, objective: None, placed: Vec::new(), status: Status::Done("x".into()) };
+            a.quests.restore(&[gone("claim"), gone("under"), gone("cold"), gone("ledger")]);
+            a.world.items = vec!["the Lantern".into(), "the Lantern's key".into()];
+            a.screen = Screen::Base;
+            a.follow();
+            frames(&mut a, 12);
+            dock_at(&mut a, base);
+            talk_to(&mut a, who);
+            read_all(&mut a, '1');
+            fly_in(&mut a, region);
+            clear(&mut a, "final1");
+            frames(&mut a, 300);
+            clear(&mut a, "final2");
+            frames(&mut a, 30);
+            assert_eq!(a.world.flags.get("ending").map(String::as_str), Some(ending));
+            assert!(a.world.ending.is_some());
+            assert!(a.world.items.is_empty());
+            let dawn = a.world.sector.region_named("Aamunkoi").unwrap();
+            assert_eq!(a.world.sector.shown(dawn), lane.is_some(), "{ending}");
+            if let Some(from) = lane {
+                assert!(a.world.sector.neighbours(dawn).contains(&a.world.sector.region_named(from).unwrap()));
+            }
+        }
     }
 }

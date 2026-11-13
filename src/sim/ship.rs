@@ -125,8 +125,8 @@ pub static TIIRA: Class = Class {
     turn_rate: 2.8,
     energy: 100.0,
     recharge: 20.0,
-    shield: 22.0,
-    shield_regen: 4.0,
+    shield: 26.0,
+    shield_regen: 6.0,
     armour: [18.0, 14.0, 14.0, 14.0],
     hull: 40.0,
     fuel: 6.0,
@@ -172,7 +172,9 @@ pub static AHMA: Class = Class {
     armour: [16.0, 12.0, 12.0, 12.0],
     hull: 35.0,
     fuel: 4.0,
-    guns: &[DRIVER, DRIVER],
+    // one driver and one laser: two drivers outgunned a starting Tiira
+    // two to one (2026-11-13)
+    guns: &[DRIVER, LASER],
     radius: 34.0,
     bounty: 400,
     cargo: 0,

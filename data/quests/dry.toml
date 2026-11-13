@@ -1,0 +1,33 @@
+# A Free Traders side story (STORY.md). Names and lines are placeholders.
+
+title = "Running Dry"
+
+[people.mirja]
+name = "Mirja Salo"
+glyph = "m"
+faction = "traders"
+base = "Usva Den"
+room = "bar"
+idle = "Ten crates, Sisu Clinic, and smile at the scanners."
+
+[people.nurse]
+name = "Nurse Ruut"
+glyph = "n"
+faction = "traders"
+base = "Sisu Clinic"
+room = "hall"
+idle = "Mirja's crates? Bless her. Bring them here."
+
+[text]
+hook = "A Free Traders fixer at Usva Den has a delivery nobody else will fly."
+hello = "Mirja Salo. Sit, sit. You know what stims are? Everybody in the Crown and the co-op calls them a vice. At Sisu Clinic they're what keeps a miner's heart going after decompression. The clinic's run dry, and every lane between here and there is patrolled by someone who'll seize them."
+ask = "Ten stims to Sisu Clinic. I'll put them in your hold and pay three thousand when the clinic has them. Will you run them?"
+yes = "I'll run them."
+no = "Not with my licence."
+fine = "Your licence will outlive a lot of miners. The offer stands."
+room = "Clear ten in your hold first, love. I'll wait."
+loaded = "There. Ten crates. A compartment helps, if you have one. Otherwise, go fast and be polite."
+run = "Run ten stims to Nurse Ruut at Sisu Clinic, past the patrols."
+short = "That's not ten. Did someone take them off you? Mirja will have more, if you go back to her."
+got = "Ten. You've no idea. We had a man on the table last night and nothing to give him. ... Mirja's paid you already, through me. Go on, before I cry on your jacket."
+done = "Sisu Clinic has its medicine. 3000 cr paid."

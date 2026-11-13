@@ -76,7 +76,19 @@ Built 2026-11-13. The written story is in `STORY.md`.
 
 ## 1.0.0
 
-- [ ] The Lantern's end: four choices, four endings, the new lane
-- [ ] The rest of the side stories: The Toll (Crown), Running Dry (Free
+Built 2026-11-13.
+
+- [x] The Lantern's end: four choices, four endings, the new lane to
+      Aamunkoi, and First Light at its end
+- [x] The rest of the side stories: The Toll (Crown), Running Dry (Free
       Traders)
-- [ ] Balance: a pass over pay, prices and fights with the story in
+- [x] Balance: the Ahma carries one driver and one laser, the Tiira
+      stronger shields, pirates aim a little worse and start greener, and
+      The Jumped Claim's jumpers are easier; Ilta points you at the yard
+      first (`sim::tests::odds_of_the_first_fights`, ignored, prints the
+      odds)
+
+## After 1.0
+
+Ideas, none promised: full gamepad play on foot and in menus; capital
+ships in half-block art; more quests from players (`QUESTS.md`).

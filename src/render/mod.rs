@@ -123,7 +123,7 @@ pub fn draw_buf(buf: &mut Buffer, area: Rect, ui: &Ui) {
         let x = l.field.x + l.field.width.saturating_sub(s.len() as u16 + 1);
         buf.set_string(x, l.field.y, s, Style::default().fg(pal::DIM).bg(pal::CHROME_BG));
     }
-    if let Some((title, text)) = &w.ending {
+    if let Some((title, text)) = w.ending.as_ref().filter(|_| app.quests.talk.is_empty()) {
         ending(buf, area, title, text);
     }
     if ui.help {
@@ -349,6 +349,18 @@ mod tests {
         assert!(t.contains("SHIELD") && t.contains("ARMOUR") && t.contains("radar"));
         assert!(t.contains('#'), "the player's glyph");
         assert!(t.contains("Pallas Reach"));
+    }
+
+    #[test]
+    fn an_ending_shows_on_its_card() {
+        let mut w = World::demo(5);
+        w.ending = Some(("Above Everything".into(), "The Lantern grew its lane up out of Revontuli Gap.\nIt always answers.".into()));
+        let a = app(w, Screen::Flight);
+        for (cw, ch) in [(20, 6), (80, 24), (100, 30)] {
+            frame_of(&a, cw, ch);
+        }
+        let t = frame_of(&a, 100, 30);
+        assert!(t.contains("ABOVE EVERYTHING") && t.contains("It always answers.") && t.contains("Enter: fly on"));
     }
 
     #[test]

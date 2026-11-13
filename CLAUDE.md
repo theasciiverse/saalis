@@ -5,7 +5,7 @@ line of Elite, Wing Commander: Privateer and above all **Ascii Sector**
 (Laserbrain Studios), rebuilt for the terminal in Rust + Ratatui with a
 universe of our own.
 
-**Status (2026-11-13):** 0.9.0: the story begins (`STORY.md`).
+**Status (2026-11-13):** 1.0.0: the story told to its end (`STORY.md`).
 - Every release up to 0.8.0 is in place: flight and combat, regions and
   trade, factions and missions, the shipyard, the living belt, walking
   the bases on foot, boarding, and quests.
@@ -39,8 +39,11 @@ universe of our own.
   lane seed (the drive lanes were grown from seeds with minds; the Lane
   Charter after the Lane War banned such minds, which is why AI cores are
   contraband). It runs from The Jumped Claim (`claim`, 0.8) through
-  `under`, `cold` and `ledger` to the finale, with side stories (`air`,
-  `debts`, `licence`) opened by time or by the story. Each later quest
+  `under`, `cold` and `ledger` to `finale` (four choices, four endings,
+  `flag("ending")`) and `dawn` at Aamunkoi Light, with side stories
+  (`air`, `debts`, `licence`, `toll`, `dry`) opened by time or by the
+  story. The ending card shows once the last talk lines are read and
+  holds the game until Enter. Each later quest
   waits with `objective(nil)` (out of the journal) on `done(...)` or the
   clock. Quests share flags (`World::flags`, saved), may hand regions
   over (`War::hand_over`) and open lanes (`World::opened`, saved and
@@ -49,7 +52,7 @@ universe of our own.
   (`Sector::shown`): off the map, the boards and the tips. A quest wreck
   carries nobody unless it says (`Ship::crew`), and boarding an empty one
   is salvage, not piracy. `app::tests::the_story_runs...` walks the
-  chapters.
+  chapters and `every_ending_plays_out` the other three endings.
 - **More of the Reach** (0.9): Tuisku Belt, Hopea Ring and Usva Deep
   (Usva Den is a black market), appended after the first nine regions so
   saves keep their numbers. A 0.8 save loads: the new bases' markets and
@@ -81,16 +84,16 @@ universe of our own.
   clinics too), saved with the game, healed in full at every landing.
 - **`--board`** starts a new game clamped onto a disabled raider, for
   trying it.
-- **Released:** v0.8.0, tagged 2026-11-13 and in hub's catalog
+- **Released:** v0.8.0, v0.9.0 and v1.0.0, tagged 2026-11-13 and in hub's catalog
   (`asciiverse/saalis.toml` and `.md` are the source; copy them to
   `hub/catalog/` and the cast to `hub/site/casts/` on each release).
-- **Next:** 1.0.0, the story's end, the last side stories and balance
-  (see `ROADMAP.md`). The Windows ARM build check for Lua is still to do at the
-  first tagged release that carries it.
+- **Next:** see "After 1.0" in `ROADMAP.md`. The Windows ARM build check
+  for Lua is still to do once the release workflow has run.
 - **Tested:** unit tests and tmux runs, with a first round of scripted
   play and tuning on 2026-11-13 (the autopilot hung short of lane mouths
   and drove through rocks; first fights were an Ahma firing two seekers
-  at once). No person has played it through yet.
+  at once; the Ahma outgunned a starting Tiira). No person has played it
+  through yet.
 - **Known simplification:** a market keeps the law of the region's
   original owner after the region changes hands. Inspections and
   patrols follow the new holder.
