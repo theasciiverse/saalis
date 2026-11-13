@@ -35,7 +35,7 @@ const USAGE: &str = "saalis: flight, combat and trade in the Northern Reach
   saalis --mute     no sound
   saalis --version
 
-Session log: ~/.local/state/saalis/session.log (SAALIS_LOG=info for less).
+Save and session log: ~/.local/state/saalis/ (SAALIS_LOG=info for a shorter log).
 Terminals without key releases: SAALIS_INPUT=latch makes turning and fire toggles.";
 
 struct Args {
@@ -85,6 +85,9 @@ fn main() -> io::Result<()> {
     let Some(args) = args() else { return Ok(()) };
     let log_path = log::init();
     ::log::info!("saalis {} start play={} demo={} seed={:?}", env!("CARGO_PKG_VERSION"), args.play, args.demo, args.seed);
+    if !args.demo {
+        sim::save::migrate();
+    }
     // sound opens before the screen is taken, so a complaint lands in the shell
     let audio = audio::Audio::new(args.mute);
     let mut terminal = ratatui::init();

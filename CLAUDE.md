@@ -91,7 +91,8 @@ SAALIS_PRINT=1 cargo test a_frame -- --nocapture   # one 100x30 frame as text
 asciiverse/record-preview.sh          # the 100x30 catalog cast (needs asciinema 3)
 ```
 
-Saved game: `~/.local/share/saalis/save.json` (`SAALIS_DATA_DIR` moves
+Saved game: `~/.local/state/saalis/save.json` (copied once
+from `~/.local/share/saalis/` when found there; `SAALIS_DATA_DIR` moves
 it). Saves happen only at the dock: on every landing, and with F.
 
 Session log: `~/.local/state/saalis/session.log`, started fresh each run.

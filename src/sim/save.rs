@@ -47,7 +47,9 @@ pub struct Save {
     pub quests: Vec<super::quest::Saved>,
 }
 
-/// Where saves live: `SAALIS_DATA_DIR`, or the platform's data folder.
+/// Where saves live: `SAALIS_DATA_DIR`, or the state folder on Linux
+/// (`$XDG_STATE_HOME/saalis`, the Asciiverse convention, beside the session
+/// log), Application Support on macOS, `%APPDATA%` on Windows.
 pub fn dir() -> Option<PathBuf> {
     // tests never touch a player's saves (a test once overwrote one)
     if cfg!(test) {
@@ -63,7 +65,39 @@ pub fn dir() -> Option<PathBuf> {
     if cfg!(target_os = "macos") {
         return home.map(|h| h.join("Library/Application Support/saalis"));
     }
-    std::env::var_os("XDG_DATA_HOME").map(PathBuf::from).or_else(|| home.map(|h| h.join(".local/share"))).map(|d| d.join("saalis"))
+    std::env::var_os("XDG_STATE_HOME").filter(|d| !d.is_empty()).map(PathBuf::from).or_else(|| home.map(|h| h.join(".local/state"))).map(|d| d.join("saalis"))
+}
+
+/// Where Linux saves lived up to 0.8 (`$XDG_DATA_HOME/saalis`).
+fn old_dir() -> Option<PathBuf> {
+    if cfg!(test) || cfg!(windows) || cfg!(target_os = "macos") || std::env::var_os("SAALIS_DATA_DIR").is_some_and(|d| !d.is_empty()) {
+        return None;
+    }
+    let home = std::env::var_os("HOME").map(PathBuf::from);
+    std::env::var_os("XDG_DATA_HOME").filter(|d| !d.is_empty()).map(PathBuf::from).or_else(|| home.map(|h| h.join(".local/share"))).map(|d| d.join("saalis"))
+}
+
+/// Copies a save and quests from the old Linux folder into the state
+/// folder, once, when the state folder has no save yet. The old folder is
+/// left as it was.
+pub fn migrate() {
+    let (Some(old), Some(new)) = (old_dir(), dir()) else { return };
+    if old == new || new.join("save.json").exists() || !old.join("save.json").exists() {
+        return;
+    }
+    if std::fs::create_dir_all(&new).is_err() {
+        return;
+    }
+    let ok = std::fs::copy(old.join("save.json"), new.join("save.json")).is_ok();
+    if let Ok(quests) = std::fs::read_dir(old.join("quests")) {
+        let _ = std::fs::create_dir_all(new.join("quests"));
+        for f in quests.flatten() {
+            if f.path().is_file() && !new.join("quests").join(f.file_name()).exists() {
+                let _ = std::fs::copy(f.path(), new.join("quests").join(f.file_name()));
+            }
+        }
+    }
+    log::info!("save copied from {} to {}: {ok}", old.display(), new.display());
 }
 
 fn path() -> Option<PathBuf> {

@@ -9,7 +9,7 @@ Put both in the `quests` folder inside Saalis's save folder:
 
 | System | Folder |
 |---|---|
-| Linux | `~/.local/share/saalis/quests/` |
+| Linux | `~/.local/state/saalis/quests/` |
 | macOS | `~/Library/Application Support/saalis/quests/` |
 | Windows | `%APPDATA%\saalis\quests\` |
 

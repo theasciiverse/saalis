@@ -103,8 +103,11 @@ On terminals that can't report key releases, held keys are read from key
 repeat. `SAALIS_INPUT=latch` makes turning, the guns and the afterburner
 toggles instead.
 
-Session log for bug reports: `~/.local/state/saalis/session.log`
-(`%LOCALAPPDATA%\saalis\session.log` on Windows), written fresh each run.
+Your game saves at the dock to `~/.local/state/saalis/save.json`
+(Application Support on macOS, `%APPDATA%\saalis` on Windows). The
+session log for bug reports, written fresh each run, is beside it:
+`~/.local/state/saalis/session.log` (`%LOCALAPPDATA%\saalis\session.log`
+on Windows).
 
 ## Credits
 

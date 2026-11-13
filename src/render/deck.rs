@@ -70,7 +70,10 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &App) {
     }
     // each room's name on its outer wall
     for r in &deck.rooms {
-        let label = format!(" {} ", r.name);
+        // a narrow room keeps the first word of its name ("guild")
+        let fits = |l: &str| l.chars().count() as i32 + 2 <= r.x1 - r.x0 - 1;
+        let name = if fits(r.name) { r.name } else { r.name.split(' ').next().unwrap_or(r.name) };
+        let label = format!(" {name} ");
         let y = if r.y0 == 0 { r.y0 } else { r.y1 };
         let y = if deck.boarding { r.y1 } else { y };
         let x = r.x0 + 1;
@@ -239,8 +242,8 @@ pub fn bottom(buf: &mut Buffer, area: Rect, app: &App) {
             Style::default().fg(pal::DIM),
         )),
         (Some(n), _) => Line::from(Span::styled(n.clone(), Style::default().fg(pal::TARGET))),
-        (None, true) => Line::from(Span::styled("F fire · walk into crew to fight, crates to loot · M medkit · < back to your ship", Style::default().fg(pal::DIM))),
-        (None, false) => Line::from(Span::styled("arrows, WASD or hjkl walk · Enter talks or uses · walk into counters · F save · Esc quit", Style::default().fg(pal::DIM))),
+        (None, true) => Line::from(Span::styled("F fire · walk into crew to fight, crates to loot · M medkit · < leave", Style::default().fg(pal::DIM))),
+        (None, false) => Line::from(Span::styled("arrows, WASD or hjkl walk · Enter talks or uses · F save · Esc quit", Style::default().fg(pal::DIM))),
     };
     Paragraph::new(line).render(inner, buf);
 }
@@ -267,7 +270,7 @@ fn board_side(buf: &mut Buffer, area: Rect, app: &App, deck: &Deck) {
         Line::from(Span::styled(name, Style::default().fg(col).add_modifier(Modifier::BOLD))),
         Line::from(""),
         Line::from(vec![Span::styled("HEALTH ", dim), Span::styled("█".repeat(filled), Style::default().fg(hp_col)), Span::styled("░".repeat(bar_w - filled), Style::default().fg(pal::TRACE))]),
-        Line::from(vec![Span::styled(format!("{} ", b.arm().name), text), Span::styled(format!("· {} · {} medkits", b.vest_name(), b.medkits), dim)]),
+        Line::from(vec![Span::styled(format!("{} ", b.arm().name), text), Span::styled(format!("· {} · {} medkit{}", b.vest_name(), b.medkits, if b.medkits == 1 { "" } else { "s" }), dim)]),
         Line::from(vec![Span::styled("crew fighting  ", dim), Span::styled(deck.crew_left().to_string(), text)]),
         Line::from(""),
     ];
