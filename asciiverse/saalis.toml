@@ -1,4 +1,4 @@
-# DRAFT for hub/catalog/saalis.toml (not in the hub: David's call)
+# The source of hub/catalog/saalis.toml: copy it there on each release.
 schema_version = 1
 id = "saalis"
 kind = "game"
@@ -16,7 +16,7 @@ genre = "simulation"
 name = "Asciiverse"
 url = "https://asciiverse.sh"
 
-# saves go to $XDG_DATA_HOME/saalis, the session log to $XDG_STATE_HOME/saalis
+# saves and the session log go to $XDG_STATE_HOME/saalis
 [exec]
 game = "saalis"
 args = []

@@ -5,7 +5,7 @@ line of Elite, Wing Commander: Privateer and above all **Ascii Sector**
 (Laserbrain Studios), rebuilt for the terminal in Rust + Ratatui with a
 universe of our own.
 
-**Status (2026-11-08):** 0.8.0 is built: quests in Lua.
+**Status (2026-11-13):** 0.8.0 is released: quests in Lua.
 - Every release up to 0.8.0 is in place: flight and combat, regions and
   trade, factions and missions, the shipyard, the living belt, walking
   the bases on foot, boarding, and quests.
@@ -67,13 +67,16 @@ universe of our own.
   clinics too), saved with the game, healed in full at every landing.
 - **`--board`** starts a new game clamped onto a disabled raider, for
   trying it.
-- **Catalog drafts** are in `asciiverse/saalis.toml` and `.md`. Putting
-  them in `hub`, pushing and tagging are David's call.
+- **Released:** v0.8.0, tagged 2026-11-13 and in hub's catalog
+  (`asciiverse/saalis.toml` and `.md` are the source; copy them to
+  `hub/catalog/` and the cast to `hub/site/casts/` on each release).
 - **Next:** 1.0.0, the written story, balance and full content (see
   `ROADMAP.md`). The Windows ARM build check for Lua is still to do at the
   first tagged release that carries it.
-- **Tested:** unit tests and tmux runs. No person has played it yet, so
-  prices and balance are untuned.
+- **Tested:** unit tests and tmux runs, with a first round of scripted
+  play and tuning on 2026-11-13 (the autopilot hung short of lane mouths
+  and drove through rocks; first fights were an Ahma firing two seekers
+  at once). No person has played it through yet.
 - **Known simplification:** a market keeps the law of the region's
   original owner after the region changes hands. Inspections and
   patrols follow the new holder.

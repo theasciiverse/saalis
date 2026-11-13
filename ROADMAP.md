@@ -42,8 +42,8 @@ Built 2026-11-07.
 Built 2026-11-07, all but the release itself.
 
 - [x] Faction fleets and region control
-- [ ] Catalog entry and first public release: drafts in `asciiverse/saalis.toml` and `.md`;
-      the hub entry, pushing and tagging are David's call
+- [x] Catalog entry and first release: tagged with 0.8.0 on 2026-11-13, after a
+      round of play and tuning (the autopilot, the first fights)
 
 ## 0.6.0 to 0.8.0
 
