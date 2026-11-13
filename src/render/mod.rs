@@ -123,6 +123,9 @@ pub fn draw_buf(buf: &mut Buffer, area: Rect, ui: &Ui) {
         let x = l.field.x + l.field.width.saturating_sub(s.len() as u16 + 1);
         buf.set_string(x, l.field.y, s, Style::default().fg(pal::DIM).bg(pal::CHROME_BG));
     }
+    if let Some((title, text)) = &w.ending {
+        ending(buf, area, title, text);
+    }
     if ui.help {
         help(buf, area);
     } else if ui.confirm_quit {
@@ -175,6 +178,25 @@ fn comms(buf: &mut Buffer, field: Rect, app: &App) {
     lines.push(Line::from(""));
     lines.push(Line::from(Span::styled("a number says it · Esc hangs up", Style::default().fg(pal::DIM))));
     card(buf, field, "comms", &lines);
+}
+
+/// The story's ending: its title and lines, until Enter.
+fn ending(buf: &mut Buffer, area: Rect, title: &str, text: &str) {
+    let width = (area.width as usize).saturating_sub(12).clamp(20, 64);
+    let mut lines = vec![Line::from(Span::styled(title.to_uppercase(), Style::default().fg(pal::TARGET).add_modifier(Modifier::BOLD))), Line::from("")];
+    for (i, para) in text.split('\n').enumerate() {
+        if i > 0 {
+            lines.push(Line::from(""));
+        }
+        lines.extend(deck::wrap(para, width).into_iter().map(Line::from));
+    }
+    lines.push(Line::from(""));
+    lines.push(Line::from(Span::styled("Enter: fly on", Style::default().fg(pal::DIM))));
+    let max = area.height.saturating_sub(2) as usize;
+    if lines.len() > max {
+        lines.drain(2..2 + lines.len() - max);
+    }
+    card(buf, area, "", &lines);
 }
 
 fn lost(buf: &mut Buffer, field: Rect, w: &crate::sim::World, demo: bool, saved: bool) {

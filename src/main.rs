@@ -228,7 +228,7 @@ fn run(terminal: &mut DefaultTerminal, kitty: bool, args: &Args, mut audio: audi
         let mut steps = 0;
         while now >= next && steps < 5 {
             let cmd = std::mem::take(&mut input.cmd);
-            let held = !input.help && !input.confirm_quit && !input.paused;
+            let held = !input.help && !input.confirm_quit && !input.paused && app.world.ending.is_none();
             if app.screen == Screen::Title && held {
                 if cmd.confirm {
                     app.new_game(seed());

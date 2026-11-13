@@ -5,7 +5,7 @@ line of Elite, Wing Commander: Privateer and above all **Ascii Sector**
 (Laserbrain Studios), rebuilt for the terminal in Rust + Ratatui with a
 universe of our own.
 
-**Status (2026-11-13):** 0.8.0 is released: quests in Lua.
+**Status (2026-11-13):** 0.9.0: the story begins (`STORY.md`).
 - Every release up to 0.8.0 is in place: flight and combat, regions and
   trade, factions and missions, the shipyard, the living belt, walking
   the bases on foot, boarding, and quests.
@@ -35,11 +35,25 @@ universe of our own.
   limit: time inside one C call (a pathological string pattern) isn't
   capped. A ship carrying a quest item is never culled as "left the
   region".
-- **The Jumped Claim** (`data/quests/claim.*`): Ilta Rask in Routa's
-  bar, whose claim beacon jumpers took. Hunt their Ahma in Kide Drift,
-  board it, bring the beacon back: 1500 cr (300 up front if you ask what's
-  in it for you). Her last line hints that the jumpers knew what was under
-  her claim (the found artifact, still open).
+- **The story** (0.9, `STORY.md`): the found artifact is the Lantern, a
+  lane seed (the drive lanes were grown from seeds with minds; the Lane
+  Charter after the Lane War banned such minds, which is why AI cores are
+  contraband). It runs from The Jumped Claim (`claim`, 0.8) through
+  `under`, `cold` and `ledger` to the finale, with side stories (`air`,
+  `debts`, `licence`) opened by time or by the story. Each later quest
+  waits with `objective(nil)` (out of the journal) on `done(...)` or the
+  clock. Quests share flags (`World::flags`, saved), may hand regions
+  over (`War::hand_over`) and open lanes (`World::opened`, saved and
+  re-opened on load), and may show an ending card (`World::ending`, not
+  saved). Aamunkoi is `hidden` until a lane reaches it
+  (`Sector::shown`): off the map, the boards and the tips. A quest wreck
+  carries nobody unless it says (`Ship::crew`), and boarding an empty one
+  is salvage, not piracy. `app::tests::the_story_runs...` walks the
+  chapters.
+- **More of the Reach** (0.9): Tuisku Belt, Hopea Ring and Usva Deep
+  (Usva Den is a black market), appended after the first nine regions so
+  saves keep their numbers. A 0.8 save loads: the new bases' markets and
+  regions start fresh (`War::grown`).
 - **On foot** (`sim/deck.rs`, `render/deck.rs`): landing puts you in the
   hangar beside your ship. Each base is a deck: the hangar, then a
   corridor with rooms above and below (exchange, guild office, bar, the
@@ -70,8 +84,8 @@ universe of our own.
 - **Released:** v0.8.0, tagged 2026-11-13 and in hub's catalog
   (`asciiverse/saalis.toml` and `.md` are the source; copy them to
   `hub/catalog/` and the cast to `hub/site/casts/` on each release).
-- **Next:** 1.0.0, the written story, balance and full content (see
-  `ROADMAP.md`). The Windows ARM build check for Lua is still to do at the
+- **Next:** 1.0.0, the story's end, the last side stories and balance
+  (see `ROADMAP.md`). The Windows ARM build check for Lua is still to do at the
   first tagged release that carries it.
 - **Tested:** unit tests and tmux runs, with a first round of scripted
   play and tuning on 2026-11-13 (the autopilot hung short of lane mouths
@@ -100,7 +114,7 @@ it). Saves happen only at the dock: on every landing, and with F.
 
 Session log: `~/.local/state/saalis/session.log`, started fresh each run.
 It holds every raw key, every state change, the comms, kills and waves,
-and a snapshot every 500 ms. `SAALIS_LOG=info` gives less;
+and a snapshot every 250 ms (with the target's range and bearing). `SAALIS_LOG=info` gives less;
 `SAALIS_LOG_DIR` puts it somewhere else.
 
 Smoke runs: `tools/run.sh [args]` starts the release build in tmux

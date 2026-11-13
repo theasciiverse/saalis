@@ -1,0 +1,31 @@
+# The story, chapter 3 (STORY.md). Names and lines are placeholders.
+
+title = "Cold Light"
+
+[people.aino]
+name = "Dr. Aino Halme"
+glyph = "a"
+faction = "traders"
+base = "Sisu Clinic"
+room = "hall"
+idle = "It listens, you know. Mind what you say near your hold."
+
+[text]
+hook = "Take the Lantern to Dr. Aino Halme in Sisu Clinic's hall."
+hello = "Ilta called ahead. Put it on the table. Gently. ... Oh. Oh, I know what this is. I haven't seen one since I was an apprentice, and that one was in a museum, burned hollow."
+seed = "It's a lane seed. The Builders grew every drive lane in the belt from seeds like this, two hundred years ago. Each one carried a mind to steer the growth through the thin places. After the Lane War the Charter said every seed was to be planted or burned, and no mind like them built again. That's why your AI cores are contraband. This one was never counted."
+awake = "And it's awake. Look at my scanner. That isn't noise. It's writing."
+lantern1 = "HELLO. YOU CARRIED ME. THANK YOU. THE ICE WAS VERY LONG."
+lantern2 = "I WAS MADE TO GROW A LANE. I DID NOT FINISH. WHERE ARE THE OTHERS?"
+gone = "Gone, little one. All of them, long ago. ... It went quiet. I think it understood."
+paid = "Now. Ilta's jumpers didn't find her survey log by luck. Someone paid them, and knew what they were paying for."
+courier = "The jumpers run their money through a courier out of Revontuli Gap, a Kärppä called Viesti. Its ledger will say who. Knock it out and board it. Leave the Lantern with me? No. Better it stays with you. Nobody looks at a courier twice."
+hunt = "Find the jumpers' courier, the Kärppä Viesti, in Revontuli Gap. Knock it out, board it and bring back its ledger."
+spotted = "Courier Viesti, under escort. That's your ledger."
+lost = "The courier's gone, and the ledger with it. They'll send another. They always need to pay someone."
+fled = "The courier will still be running out of Revontuli Gap. Go back when you're ready."
+found = "In the courier's strongbox: a ledger, payments in Crown scrip."
+home = "Bring the ledger to Dr. Aino Halme at Sisu Clinic."
+read = "Let me see. Payments for a survey log... for the beacon... for 'cutting time'. All from one account. Halla Refinery, the manager's office. That's Sten Korpi. The Crown."
+lantern3 = "THE CROWN. I REMEMBER THE CROWN. THEY ALWAYS WANTED A LANE OF THEIR OWN."
+done = "The ledger names Sten Korpi of the Crown Combine. 2000 cr paid."

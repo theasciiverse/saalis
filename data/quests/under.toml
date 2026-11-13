@@ -1,0 +1,29 @@
+# The story, chapter 2 (STORY.md). Names and lines are placeholders.
+
+title = "What Lies Under Kide"
+
+[people.ilta]
+name = "Ilta Rask"
+glyph = "i"
+faction = "coop"
+base = "Kide Mine"
+room = "bar"
+idle = "The crew's ready when you are. Fly out over the claim and keep the jumpers off us."
+
+[text]
+hook = "Ilta Rask has sent word from Kide Mine: she found something under her claim."
+hello = "You came. Sit. I drilled where that survey log pointed. Forty metres down, the bit hit something that isn't ice and isn't rock. Smooth. Cold enough to frost the drill. And it hums, if you put your hand on the casing."
+ask = "The jumpers will be back the moment they hear we're cutting. Will you fly cover over the claim while my crew digs it out?"
+yes = "I'll keep them off you."
+pay = "What does it pay?"
+no = "Not today."
+offer = "Twelve hundred, and whatever's in their holds. It's all I've got until I know what this is."
+later = "Then come back when you can. It's waited this long."
+go = "Good. Fly out over the claim in Kide Drift. They'll come in from the Kalmisto lane, they always do."
+first = "Contact on my board. Jumpers, two of them. Keep them off the rig!"
+second = "That's not all of them. Something bigger behind. Hold on, we're nearly through!"
+left = "You've gone. They'll be back on us. Come back out over the claim when you're ready."
+free = "We're through. It's out of the ice. Stars above, it's glowing. My crew's calling it the Lantern."
+stow = "Listen. Nobody searches a courier for a thing like this, and every jumper in the Reach will be watching my rig. We're putting it in your hold."
+where = "There's one person in the Reach who might know what it is: Dr. Aino Halme at Sisu Clinic. She built lanes before she mended people. Take it to her."
+done = "The Lantern is in your hold. 1200 cr paid."

@@ -14,8 +14,10 @@ Put both in the `quests` folder inside Saalis's save folder:
 | Windows | `%APPDATA%\saalis\quests\` |
 
 Every quest there is loaded when a game starts or is continued. The game's
-own quest, *The Jumped Claim*, is in `data/quests/` in the source and is
-the example to copy.
+own quests are in `data/quests/` in the source: *The Jumped Claim*
+(`claim`) is the simplest to copy, and `STORY.md` tells the story they
+make up together. A quest of yours can follow on from them with
+`done("claim")` or `flag("ending")`.
 
 If a quest has a mistake, it does not stop the game. The quest shows as
 *broken* in the journal (beside the deck, on the map and on the mission
@@ -114,6 +116,9 @@ any loop that checks something every moment.
 | `boarded(tag)` | true while you are aboard one of them |
 | `talked(id)` | true at the moment you talk to that person |
 | `random(m, n)` | a whole number from m to n (`math.random` is the same) |
+| `done(id)`, `failed(id)` | whether another quest (by its file name) has finished, or failed |
+| `flag(name)` | a flag any quest set, as a string, or nil |
+| `owner(region)` | who holds a region now: `"coop"`, `"crown"`, `"traders"`, `"inner"` or `"pirates"`; the one you are in if left out |
 
 ## What a script can do
 
@@ -130,6 +135,10 @@ any loop that checks something every moment.
 | `shift(faction, n)` | changes your standing |
 | `spawn{ ... }` | ships near you, while you fly; returns how many came (see below) |
 | `finish(text)`, `fail(text)` | ends the quest, saying `text` |
+| `set_flag(name, value)` | sets a flag every quest can read (a string, number or true; nil or false clears it); saved |
+| `hand_over(region, faction)` | gives a region to a faction, garrisoned, and turns back any fleet bound for it |
+| `open_lane(a, b)` | opens a drive lane between two regions for good (returns whether it is new); a region off the map appears once a lane reaches it |
+| `ending(title, text)` | shows a card with a title and text (`\n` between paragraphs) that holds the game until Enter |
 | `print(...)`, `log(...)` | writes to the session log |
 
 The `wait` family:
@@ -161,6 +170,7 @@ spawn{
   wreck = false,          -- true: already dead in space, waiting to be boarded
   skill = 0.5,            -- 0 to 1: how well they fly and shoot
   distance = 3500,        -- metres from you
+  crew = 2,               -- who is aboard when boarded: by the hull if left out, nobody on a wreck
 }
 ```
 

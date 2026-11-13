@@ -1,0 +1,29 @@
+# A side story (STORY.md). Names and lines are placeholders.
+
+title = "Old Debts"
+
+[people.harri]
+name = "Harri Tuomi"
+glyph = "h"
+faction = "coop"
+base = "Vaski Works"
+room = "bar"
+idle = "Twelve years. You'd think a man would stop looking."
+
+[text]
+hook = "An old pilot in Vaski Works' bar buys drinks for anyone who flies Kalmisto."
+hello = "You've got the look. Flown Kalmisto, have you? Sit. I flew the Watch for twenty years. Twelve years ago my wingman, Lauri Aalto, went down in Kalmisto chasing jumpers. They never found his Kotka. Nobody looks hard for a wreck in a field of wrecks."
+ask = "His flight recorder would still be aboard. I'd like to know what he said at the end. Will you look?"
+yes = "I'll look for him."
+no = "Kalmisto's no place to go looking."
+fine = "No. It isn't. The offer's open."
+thanks = "Fly the field slow. He'd have gone down past the big rocks, where the jumpers like to hide. If you're out there, I'll know you'll see it."
+hunt = "Find Lauri Aalto's lost Kotka in Kalmisto and bring its flight recorder to Harri Tuomi at Vaski Works."
+seen = "Old patrol transponder, very faint. A Watch Kotka, dead for years."
+gone = "The old Kotka is gone. Harri will have to wait a little longer; come back to Kalmisto."
+found = "Behind the seat, in a scorched case: the Kotka's flight recorder, still sealed."
+back = "Bring Lauri's flight recorder to Harri Tuomi at Vaski Works."
+listen = "That's his. That's his case. ... Play it. Please."
+lauri = "This is Watch Two. Harri, I've got three on me and the guns are cold. Don't come back for me. Get the freighters home. ... It's quiet out here. You can see all of Pallas. Tell my sister I said."
+after = "Tell my sister. He never said what. He never had to. ... Thank you. Take this. I won't fly again, and you will."
+done = "Harri Tuomi heard his wingman's last words. 1800 cr paid."

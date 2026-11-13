@@ -118,6 +118,26 @@ impl War {
         news
     }
 
+    /// Region `r` changes hands, garrisoned, with no fleet left bound for it.
+    pub fn hand_over(&mut self, r: usize, f: Faction) {
+        self.control[r] = f;
+        self.garrison[r] = cap(f) * 0.85;
+        self.fleets.retain(|x| x.to != r);
+    }
+
+    /// A save from before the Reach grew: its regions, then the new ones
+    /// as they start.
+    pub fn grown(mut self, s: &Sector) -> War {
+        let fresh = War::new(s);
+        let n = self.control.len().min(fresh.control.len());
+        self.control.truncate(n);
+        self.garrison.truncate(n);
+        self.control.extend_from_slice(&fresh.control[n..]);
+        self.garrison.extend_from_slice(&fresh.garrison[n..]);
+        self.fleets.retain(|f| f.from < s.regions.len() && f.to < s.regions.len());
+        self
+    }
+
     /// A claim-jumper killed by the player in region `r`.
     pub fn pirate_down(&mut self, r: usize) {
         if self.control[r] == Faction::Pirates {

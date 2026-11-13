@@ -171,7 +171,7 @@ fn sector(buf: &mut Buffer, map: Rect, list: Rect, app: &App) {
             buf.set_string(map.x + x, map.y + y, ARROWS[i], Style::default().fg(rgb(pal::faction(f.faction))).add_modifier(Modifier::BOLD));
         }
     }
-    for (i, r) in s.regions.iter().enumerate() {
+    for (i, r) in s.regions.iter().enumerate().filter(|&(i, _)| s.shown(i)) {
         let (x, y) = place(r.map);
         let (x, y) = (x as u16, y as u16);
         if x >= map.width || y >= map.height {
@@ -190,7 +190,7 @@ fn sector(buf: &mut Buffer, map: Rect, list: Rect, app: &App) {
         buf.set_string(map.x + x + 2, map.y + y, name, st);
     }
     let mut lines = vec![Line::from(Span::styled("REGIONS", Style::default().fg(pal::DIM))), Line::from("")];
-    for (i, r) in s.regions.iter().enumerate() {
+    for (i, r) in s.regions.iter().enumerate().filter(|&(i, _)| s.shown(i)) {
         let mut st = Style::default().fg(if i == w.region { pal::TARGET } else { pal::TEXT });
         if i == app.map_sel {
             st = st.add_modifier(Modifier::REVERSED);

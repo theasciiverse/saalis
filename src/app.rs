@@ -252,6 +252,14 @@ impl App {
 
     /// A key on the map, at the dock or on comms.
     pub fn menu_key(&mut self, k: KeyEvent) {
+        // an ending's card holds everything until Enter, Space or Esc
+        if self.world.ending.is_some() {
+            if matches!(k.code, KeyCode::Enter | KeyCode::Esc | KeyCode::Char(' ')) {
+                log::info!("ending card closed");
+                self.world.ending = None;
+            }
+            return;
+        }
         match self.screen {
             Screen::Map => self.map_key(k),
             Screen::Base => self.base_key(k),
@@ -529,8 +537,19 @@ impl App {
                 self.map_sector = !self.map_sector;
                 self.map_sel = if self.map_sector { self.world.course.last().copied().unwrap_or(self.world.region) } else { 0 };
             }
-            KeyCode::Up | KeyCode::Char('w') | KeyCode::Char('k') if rows > 0 => self.map_sel = (self.map_sel + rows - 1) % rows,
-            KeyCode::Down | KeyCode::Char('s') | KeyCode::Char('j') if rows > 0 => self.map_sel = (self.map_sel + 1) % rows,
+            KeyCode::Up | KeyCode::Char('w') | KeyCode::Char('k') if rows > 0 => {
+                self.map_sel = (self.map_sel + rows - 1) % rows;
+                // regions off the map are passed over
+                while self.map_sector && !self.world.sector.shown(self.map_sel) {
+                    self.map_sel = (self.map_sel + rows - 1) % rows;
+                }
+            }
+            KeyCode::Down | KeyCode::Char('s') | KeyCode::Char('j') if rows > 0 => {
+                self.map_sel = (self.map_sel + 1) % rows;
+                while self.map_sector && !self.world.sector.shown(self.map_sel) {
+                    self.map_sel = (self.map_sel + 1) % rows;
+                }
+            }
             KeyCode::Enter | KeyCode::Char('g') | KeyCode::Char('G') => {
                 if self.map_sector {
                     if self.map_sel != self.world.region {
@@ -675,7 +694,7 @@ mod tests {
             .find(|&i| deck.named_id(i) == Some(id))
             .unwrap_or_else(|| panic!("{id} is on the deck"));
         let (x, y) = (deck.npcs[i].x, deck.npcs[i].y);
-        deck.you = [
+        let spot = [
             (x - 1, y),
             (x + 1, y),
             (x, y - 1),
@@ -687,10 +706,18 @@ mod tests {
         ]
         .into_iter()
         .find(|&(px, py)| {
-            deck.tile(px, py) == crate::sim::deck::Tile::Floor && deck.npc_at(px, py).is_none()
+            let free = deck.tile(px, py) == crate::sim::deck::Tile::Floor && deck.npc_at(px, py).is_none();
+            // and nobody else nearer to hand
+            free && {
+                let was = deck.you;
+                deck.you = (px, py);
+                let ok = deck.nearby() == Some(Use::Talk(i));
+                deck.you = was;
+                ok
+            }
         })
         .expect("room beside them");
-        assert_eq!(deck.nearby(), Some(Use::Talk(i)));
+        deck.you = spot;
         a.menu_key(KeyEvent::from(KeyCode::Enter));
     }
 
@@ -844,5 +871,103 @@ mod tests {
         assert_eq!(a.world.phase, Phase::Lost);
         a.follow();
         assert_eq!(a.screen, Screen::Flight, "the card shows over the field");
+    }
+
+    fn dock_at(a: &mut App, base: &str) {
+        if matches!(a.world.phase, Phase::Docked(_)) {
+            a.world.launch();
+            a.follow();
+        }
+        let (r, _) = a.world.sector.all_bases().into_iter().find(|&(r, b)| a.world.sector.regions[r].bases[b].name == base).expect("the base");
+        a.world.enter_region_for_test(r);
+        let b = a.world.bases.iter().position(|b| b.name == base).unwrap();
+        a.world.phase = Phase::Docked(b);
+        a.follow();
+        frames(a, 12);
+    }
+
+    fn fly_in(a: &mut App, region: &str) {
+        if matches!(a.world.phase, Phase::Docked(_)) {
+            a.world.launch();
+            a.follow();
+        }
+        let r = a.world.sector.region_named(region).expect("the region");
+        a.world.enter_region_for_test(r);
+        a.world.encounter_t = f32::INFINITY;
+        frames(a, 420);
+    }
+
+    fn spawned(a: &App, tag: &str) -> bool {
+        a.world.ships.iter().any(|s| s.alive && s.tag.as_deref() == Some(tag))
+    }
+
+    fn clear(a: &mut App, tag: &str) {
+        assert!(spawned(a, tag), "{tag} came");
+        for s in a.world.ships.iter_mut().filter(|s| s.tag.as_deref() == Some(tag)) {
+            s.alive = false;
+        }
+    }
+
+    fn status(a: &App, id: &str) -> crate::sim::quest::Status {
+        a.quests.states.iter().find(|q| q.id == id).expect("the quest").status.clone()
+    }
+
+    fn stage(a: &App, id: &str) -> String {
+        a.quests.states.iter().find(|q| q.id == id).expect("the quest").stage.clone()
+    }
+
+    #[test]
+    fn the_story_runs_from_the_claim_to_the_lanterns_key() {
+        use crate::sim::quest::{Saved, Status};
+        let done = |s: Status| matches!(s, Status::Done(_));
+        let mut a = app(World::new(11));
+        a.quests = Quests::built_in();
+        a.quests.restore(&[Saved { id: "claim".into(), stage: "home".into(), vars: serde_json::Value::Null, objective: None, placed: Vec::new(), status: Status::Done("x".into()) }]);
+        a.screen = Screen::Base;
+        a.follow();
+        frames(&mut a, 12);
+        // What Lies Under Kide: word from Ilta after a while
+        a.world.clock += 7.0;
+        dock_at(&mut a, "Kide Mine");
+        talk_to(&mut a, "ilta");
+        read_all(&mut a, '1');
+        assert_eq!(stage(&a, "under"), "cover");
+        fly_in(&mut a, "Kide Drift");
+        clear(&mut a, "diggers1");
+        frames(&mut a, 300);
+        clear(&mut a, "diggers2");
+        frames(&mut a, 30);
+        assert!(done(status(&a, "under")), "{:?}", status(&a, "under"));
+        assert!(a.world.items.iter().any(|i| i == "the Lantern"));
+        // Cold Light: Dr. Halme, the courier, the ledger
+        dock_at(&mut a, "Sisu Clinic");
+        talk_to(&mut a, "aino");
+        read_all(&mut a, '1');
+        assert_eq!(stage(&a, "cold"), "hunt");
+        fly_in(&mut a, "Revontuli Gap");
+        assert!(spawned(&a, "courier"));
+        a.world.items.push("the jumpers' ledger".into());
+        frames(&mut a, 30);
+        dock_at(&mut a, "Sisu Clinic");
+        talk_to(&mut a, "aino");
+        read_all(&mut a, '1');
+        assert!(done(status(&a, "cold")), "{:?}", status(&a, "cold"));
+        // The Ledger: Korpi's offer, then the key in Kalmisto
+        dock_at(&mut a, "Halla Refinery");
+        talk_to(&mut a, "korpi");
+        read_all(&mut a, '2');
+        assert_eq!(a.world.flags.get("korpi_offer").map(String::as_str), Some("true"));
+        fly_in(&mut a, "Kalmisto");
+        assert!(spawned(&a, "hulk") && spawned(&a, "scavengers"));
+        a.world.items.push("the Lantern's key".into());
+        frames(&mut a, 30);
+        assert!(done(status(&a, "ledger")), "{:?}", status(&a, "ledger"));
+        assert_eq!(a.world.flags.get("key").map(String::as_str), Some("true"));
+        // the side stories opened on the way, and nothing broke
+        for q in &a.quests.states {
+            assert!(!matches!(q.status, Status::Broken(_)), "{} broke: {:?}", q.id, q.status);
+        }
+        assert!(a.quests.journal().any(|q| q.title == "Licence Revoked"));
+        assert!(a.quests.journal().any(|q| q.title == "Old Debts"));
     }
 }

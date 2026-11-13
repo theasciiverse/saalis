@@ -37,7 +37,14 @@ const BUDGET: i64 = 500;
 const MAX_STAGES: usize = 16;
 
 /// The built-in quests: id, cast and lines, script.
-const BUILT_IN: &[(&str, &str, &str)] = &[("claim", include_str!("../../data/quests/claim.toml"), include_str!("../../data/quests/claim.lua"))];
+macro_rules! quest {
+    ($id:literal) => {
+        ($id, include_str!(concat!("../../data/quests/", $id, ".toml")), include_str!(concat!("../../data/quests/", $id, ".lua")))
+    };
+}
+
+/// The game's own quests: the story in order (STORY.md), then the side stories.
+const BUILT_IN: &[(&str, &str, &str)] = &[quest!("claim"), quest!("under"), quest!("cold"), quest!("ledger"), quest!("air"), quest!("debts"), quest!("licence")];
 
 /// The game's functions, as quests call them (`PRELUDE` builds on them).
 const CALLS: &[&str] = &[
@@ -75,6 +82,14 @@ const CALLS: &[&str] = &[
     "finish_",
     "fail_",
     "random",
+    "done",
+    "failed",
+    "flag",
+    "set_flag",
+    "owner",
+    "hand_over",
+    "open_lane",
+    "ending_",
 ];
 
 /// Helpers every quest sees, written in Lua over the game's own functions.
@@ -97,6 +112,7 @@ function choose(who, prompt, options)
 end
 function finish(text) finish_(text or ""); while true do coroutine.yield() end end
 function fail(text) fail_(text or ""); while true do coroutine.yield() end end
+function ending(title, text) ending_(title, text or "") end
 "#;
 
 /// A quest's cast and lines, from its TOML.
@@ -669,6 +685,69 @@ impl Quests {
                 Ok(Value::Integer((lo as i128 + w.rng.below(span as u32) as i128) as i64))
             })?;
             set("random", random)?;
+            // --- the story's (0.9): other quests, shared flags, the war, lanes
+            set("done", s.create_function(|_, id: String| Ok(sts.borrow().iter().any(|q| q.id == id && matches!(q.status, Status::Done(_)))))?)?;
+            set("failed", s.create_function(|_, id: String| Ok(sts.borrow().iter().any(|q| q.id == id && matches!(q.status, Status::Failed(_)))))?)?;
+            set("flag", s.create_function(|_, name: String| Ok(world.borrow().flags.get(&name).cloned()))?)?;
+            set(
+                "set_flag",
+                s.create_function(|_, (name, v): (String, Value)| {
+                    let mut w = world.borrow_mut();
+                    let v = match v {
+                        Value::Nil | Value::Boolean(false) => None,
+                        Value::Boolean(true) => Some("true".to_string()),
+                        Value::Integer(n) => Some(n.to_string()),
+                        Value::Number(n) => Some(n.to_string()),
+                        Value::String(t) => Some(t.to_str()?.to_string()),
+                        _ => return Err(mlua::Error::runtime("set_flag takes a string, a number or a boolean")),
+                    };
+                    if w.flags.len() >= 256 && !w.flags.contains_key(&name) {
+                        return Err(mlua::Error::runtime("too many flags"));
+                    }
+                    log::info!("flag {name} = {v:?}");
+                    match v {
+                        Some(v) => w.flags.insert(name, v),
+                        None => w.flags.remove(&name),
+                    };
+                    Ok(())
+                })?,
+            )?;
+            set(
+                "owner",
+                s.create_function(|_, r: Option<String>| {
+                    let w = world.borrow();
+                    let r = match r {
+                        Some(r) => region_of(&w, &r)?,
+                        None => w.region,
+                    };
+                    Ok(faction_id(w.war.control[r]))
+                })?,
+            )?;
+            set(
+                "hand_over",
+                s.create_function(|_, (r, f): (String, String)| {
+                    let mut w = world.borrow_mut();
+                    let r = region_of(&w, &r)?;
+                    w.hand_over(r, faction(&f)?);
+                    Ok(())
+                })?,
+            )?;
+            set(
+                "open_lane",
+                s.create_function(|_, (a, b): (String, String)| {
+                    let mut w = world.borrow_mut();
+                    let (a, b) = (region_of(&w, &a)?, region_of(&w, &b)?);
+                    Ok(w.open_lane(a, b))
+                })?,
+            )?;
+            set(
+                "ending_",
+                s.create_function(|_, (title, text): (String, String)| {
+                    log::info!("ending: {title}");
+                    world.borrow_mut().ending = Some((title, text));
+                    Ok(())
+                })?,
+            )?;
 
             for (i, h) in handles.iter_mut().enumerate() {
                 let Some(h) = h else { continue };
@@ -937,6 +1016,21 @@ fn place_named(s: &str) -> Option<Option<Place>> {
     }))
 }
 
+fn region_of(w: &World, name: &str) -> mlua::Result<usize> {
+    w.sector.region_named(name).ok_or_else(|| mlua::Error::runtime(format!("no region called {name}")))
+}
+
+/// A faction's short name, as quests write it.
+pub fn faction_id(f: Faction) -> &'static str {
+    match f {
+        Faction::Coop => "coop",
+        Faction::Crown => "crown",
+        Faction::Traders => "traders",
+        Faction::Inner => "inner",
+        Faction::Pirates => "pirates",
+    }
+}
+
 fn faction(s: &str) -> mlua::Result<Faction> {
     faction_named(s).ok_or_else(|| mlua::Error::runtime(format!("no faction called {s}")))
 }
@@ -988,6 +1082,7 @@ fn tagged(t: &Table) -> mlua::Result<Tagged> {
         wreck: t.get::<Option<bool>>("wreck")?.unwrap_or(false),
         skill: t.get::<Option<f32>>("skill")?.unwrap_or(0.5).clamp(0.0, 1.0),
         distance: t.get::<Option<f32>>("distance")?.unwrap_or(3500.0).clamp(500.0, 8000.0),
+        crew: t.get::<Option<u8>>("crew")?,
     })
 }
 

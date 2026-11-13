@@ -1,0 +1,33 @@
+# The story, chapter 4 (STORY.md). Names and lines are placeholders.
+
+title = "The Ledger"
+
+[people.korpi]
+name = "Sten Korpi"
+glyph = "k"
+faction = "crown"
+base = "Halla Refinery"
+room = "hall"
+idle = "My offer stands. The Crown is patient, up to a point."
+
+[text]
+hook = "The ledger names Sten Korpi, the Crown's manager at Halla Refinery. Ask him why."
+hello = "Ah. The courier pilot. Sit down, I've had the chair warmed. You've read my ledger, so let's not waste each other's time."
+why = "Why? Because every crate that leaves the Reach goes down one lane, through Gate Customs, and pays the inner planets for the privilege. A seed can grow a second lane. Ours. Straight down to Vesta, and nobody's toll on it but the Crown's."
+offer = "Twenty-five thousand credits, the day you bring it here. And a berth with the Crown for life. Think it over. You'll find I'm the only one in the Reach who can actually pay you."
+q = "Well?"
+a1 = "I'll think about it."
+a2 = "You hired jumpers to rob a prospector."
+a3 = "Never."
+think = "Do. Don't take too long."
+robbed = "I hired jumpers to recover Builder property from a claim that should never have been filed. The courts would have taken a decade. I'm a busy man."
+never = "Never is a long time in the Reach. The offer stands."
+lantern1 = "THAT MAN IS AFRAID OF ME. HE HIDES IT WELL."
+lantern2 = "I CANNOT BE PLANTED WITHOUT MY KEY. IT WAS ON MY BUILDER SHIP, THE ENSIMMÄINEN. IT BROKE APART WHERE YOU CALL KALMISTO. PLEASE. I WOULD LIKE TO SEE IT."
+kalmisto = "Find the wreck of the Builder ship Ensimmäinen in Kalmisto and bring the Lantern's planting key from its hold."
+spotted = "THERE. THAT IS MY SHIP. THERE ARE PEOPLE LIVING IN IT."
+squatters = "Scavengers have made a home of the Ensimmäinen. Clear them and board the hulk."
+lost = "THE SHIP IS GONE. ... NO. IT IS STILL THERE. I CAN FEEL IT. COME BACK."
+found = "In the Ensimmäinen's hold, under two centuries of frost: a long key of the same dark glass as the Lantern."
+lantern3 = "MY KEY. NOW I CAN GROW. BUT A LANE GOES WHERE SOMEONE PLANTS IT, AND STAYS THERE. WHO WILL YOU GIVE IT TO?"
+done = "You hold the Lantern and its key. Where it is planted is yours to decide."

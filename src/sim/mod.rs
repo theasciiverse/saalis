@@ -168,6 +168,9 @@ pub struct Tagged {
     pub skill: f32,
     /// how far from you they appear
     pub distance: f32,
+    /// who is aboard when boarded: by the hull if None, and nobody on a
+    /// wreck unless the quest says
+    pub crew: Option<u8>,
 }
 
 /// A place in the current region to fly to.
@@ -217,6 +220,12 @@ pub struct World {
     pub lost_aboard: Option<String>,
     /// what quests have handed you or you found for them, by name
     pub items: Vec<String>,
+    /// the quests' shared flags (the story's choices), saved
+    pub flags: std::collections::BTreeMap<String, String>,
+    /// lanes the story opened, by region, saved
+    pub opened: Vec<(usize, usize)>,
+    /// an ending to show on a card: a title and its lines (not saved; shown once)
+    pub ending: Option<(String, String)>,
     pub next_mission: u32,
     /// what the player paid per unit, on average, for what is in the hold
     pub paid: [u32; econ::N],
@@ -239,7 +248,7 @@ pub struct World {
     /// seconds in the current phase
     pub phase_t: f32,
     /// seconds until the next encounter may come
-    encounter_t: f32,
+    pub(crate) encounter_t: f32,
     /// demo and title: encounters come thick and fast
     pub busy: bool,
     next_id: u32,
@@ -301,6 +310,9 @@ impl World {
             body: body::Body::default(),
             lost_aboard: None,
             items: Vec::new(),
+            flags: Default::default(),
+            opened: Vec::new(),
+            ending: None,
             next_mission: 0,
             paid: [0; econ::N],
             ships: Vec::new(),
@@ -943,8 +955,9 @@ impl World {
                 p.vel = t.vel;
                 p.set_speed = 0.0;
             }
-            // boarding a lawful ship is piracy, whoever knocked it out
-            if t.side != Side::Pirate {
+            // boarding a lawful ship is piracy, whoever knocked it out (an
+            // empty wreck a quest sent you to is salvage)
+            if t.side != Side::Pirate && t.crew != Some(0) {
                 self.standing.shift(t.faction, -10);
             }
             log::info!("boarding {} ({})", t.callsign, t.class.name);
@@ -966,7 +979,7 @@ impl World {
             _ => 1,
         };
         // one at the controls, one more per size; a heavy hull may carry a third
-        let crew = 1 + size + u8::from(size == 2 && self.rng.chance(0.5));
+        let crew = s.crew.map(|c| c.min(4)).unwrap_or_else(|| 1 + size + u8::from(size == 2 && self.rng.chance(0.5)));
         let lots = match (s.side, size) {
             (Side::Trader, _) => 2 + self.rng.below(3),
             (_, 0) => 1,
@@ -1279,7 +1292,7 @@ impl World {
     pub fn tip(&mut self) -> String {
         let g = self.rng.below(econ::N as u32) as usize;
         let all = self.sector.all_bases();
-        let best = (0..self.markets.len()).filter(|&m| self.markets[m].open[g]).max_by_key(|&m| self.markets[m].sell_price(g));
+        let best = (0..self.markets.len()).filter(|&m| self.markets[m].open[g] && self.sector.shown(all[m].0)).max_by_key(|&m| self.markets[m].sell_price(g));
         match best {
             Some(m) => {
                 let (r, b) = all[m];
@@ -1983,6 +1996,7 @@ impl World {
             s.tag = Some(q.tag.clone());
             // the item rides with the first of them
             s.item = if k == 0 { q.item.clone() } else { None };
+            s.crew = if q.wreck { Some(q.crew.unwrap_or(0)) } else { q.crew };
             if q.wreck {
                 // dead in space already: drifting, open to boarding
                 s.vel = V2::from_heading(heading) * 5.0;
@@ -1994,7 +2008,8 @@ impl World {
             }
             s.vel = V2::from_heading(heading) * q.class.max_speed * 0.6;
             s.kit.launcher = q.class.size != Size::Light && q.side != Side::Trader;
-            s.kit.seekers = if s.kit.launcher { 2 } else { 0 };
+            s.kit.seekers = if !s.kit.launcher { 0 } else if q.class.size == Size::Heavy { 2 } else { 1 };
+            s.launch_cd = self.rng.range(6.0, 12.0);
             s.kit.turret = q.class.size == Size::Heavy || q.side == Side::Trader;
             let brain = match q.side {
                 Side::Trader => {
@@ -2098,6 +2113,29 @@ impl World {
         let from = self.ships.last().map(|s| s.callsign.clone()).unwrap_or_default();
         let line = ARRIVALS[self.rng.below(ARRIVALS.len() as u32) as usize];
         self.say(from, line, Some(Side::Pirate));
+    }
+
+    /// Opens a lane between two regions for good (the story's).
+    pub fn open_lane(&mut self, a: usize, b: usize) -> bool {
+        if !self.sector.open_lane(a, b) {
+            return false;
+        }
+        self.opened.push((a, b));
+        log::info!("lane opened {} <-> {}", self.sector.regions[a].name, self.sector.regions[b].name);
+        let line = format!("A new lane is open: {} to {}.", self.sector.regions[a].name, self.sector.regions[b].name);
+        self.say("Lane beacon", line, None);
+        true
+    }
+
+    /// Hands a region to a faction (the story's turns of the war).
+    pub fn hand_over(&mut self, r: usize, f: Faction) {
+        if r >= self.sector.regions.len() || self.war.control[r] == f {
+            return;
+        }
+        self.war.hand_over(r, f);
+        log::info!("{} handed to {:?}", self.sector.regions[r].name, f);
+        let line = format!("{} is held by the {} now.", self.sector.regions[r].name, f.name());
+        self.say("Lane beacon", line, None);
     }
 
     /// One line of state for the session log.

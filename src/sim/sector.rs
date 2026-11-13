@@ -76,6 +76,8 @@ pub struct RegionDef {
     /// how many rocks
     pub rocks: u32,
     pub bases: Vec<BaseDef>,
+    /// off the map until a lane to it opens (the story's last region)
+    pub hidden: bool,
 }
 
 pub struct Sector {
@@ -85,7 +87,7 @@ pub struct Sector {
 }
 
 fn base(name: &'static str, kind: BaseKind, x: f32, y: f32, radius: f32) -> BaseDef {
-    let black_market = matches!(name, "Vaski Works" | "Halla Refinery");
+    let black_market = matches!(name, "Vaski Works" | "Halla Refinery" | "Usva Den");
     BaseDef { name, kind, black_market, pos: v2(x, y), radius }
 }
 
@@ -93,7 +95,7 @@ impl Sector {
     pub fn reach() -> Sector {
         use BaseKind::*;
         use Faction::*;
-        let r = |name, note, mx, my, threat, owner, rocks, bases| RegionDef { name, note, map: v2(mx, my), threat, owner, rocks, bases };
+        let r = |name, note, mx, my, threat, owner, rocks, bases| RegionDef { name, note, map: v2(mx, my), threat, owner, rocks, bases, hidden: false };
         let regions = vec![
             r("Pallas Reach", "the Reach's heart, round Pallas", 0.50, 0.55, 1, Coop, 26, vec![base("Routa Station", Hub, 0.0, 0.0, 260.0)]),
             r("Kide Drift", "ice and rare earths, thin patrols", 0.30, 0.42, 1, Coop, 34, vec![base("Kide Mine", Mine, 2600.0, -1800.0, 200.0)]),
@@ -104,9 +106,33 @@ impl Sector {
             r("Sisu Hollow", "the Reach's only hospital", 0.62, 0.78, 1, Traders, 16, vec![base("Sisu Clinic", Clinic, -2200.0, -1200.0, 200.0)]),
             r("Kalmisto", "a field of wrecks; nobody asks", 0.12, 0.30, 3, Pirates, 44, vec![]),
             r("Crown Gate", "the lane down to the low belt", 0.45, 0.92, 0, Inner, 12, vec![base("Gate Customs", Customs, 0.0, 0.0, 280.0)]),
+            // 0.9: more of the Reach, added at the end so saves keep their
+            // region and base numbers
+            r("Tuisku Belt", "ice in a storm of grit; the Reach's coldest mine", 0.20, 0.86, 2, Coop, 38, vec![base("Tuisku Mine", Mine, -2400.0, 1600.0, 210.0)]),
+            r("Hopea Ring", "the Crown's polished outpost", 0.86, 0.84, 1, Crown, 14, vec![base("Hopea Exchange", Hub, 1800.0, -1400.0, 270.0)]),
+            r("Usva Deep", "fog of dust and nobody's law", 0.86, 0.16, 2, Traders, 28, vec![base("Usva Den", Hub, -1200.0, -2600.0, 220.0)]),
+            RegionDef { hidden: true, ..r("Aamunkoi", "the new lane's end, above everything", 0.66, 0.05, 1, Coop, 20, vec![base("Aamunkoi Light", Hub, 1500.0, 1500.0, 240.0)]) },
         ];
-        let lanes = vec![(0, 1), (0, 2), (0, 6), (0, 8), (1, 3), (1, 5), (1, 7), (2, 4), (2, 5), (3, 7), (4, 6), (6, 8)];
+        let lanes = vec![(0, 1), (0, 2), (0, 6), (0, 8), (1, 3), (1, 5), (1, 7), (2, 4), (2, 5), (3, 7), (4, 6), (6, 8), (3, 9), (9, 8), (4, 10), (6, 10), (2, 11), (5, 11)];
         Sector { regions, lanes }
+    }
+
+    /// Whether a region is on the map: not hidden, or a lane reaches it.
+    pub fn shown(&self, r: usize) -> bool {
+        !self.regions[r].hidden || self.lanes.iter().any(|&(a, b)| a == r || b == r)
+    }
+
+    /// Opens a lane (the story's); returns whether it is new.
+    pub fn open_lane(&mut self, a: usize, b: usize) -> bool {
+        if a == b || a >= self.regions.len() || b >= self.regions.len() || self.lanes.iter().any(|&l| l == (a, b) || l == (b, a)) {
+            return false;
+        }
+        self.lanes.push((a, b));
+        true
+    }
+
+    pub fn region_named(&self, name: &str) -> Option<usize> {
+        self.regions.iter().position(|r| r.name.eq_ignore_ascii_case(name))
     }
 
     pub fn neighbours(&self, r: usize) -> Vec<usize> {
@@ -196,9 +222,11 @@ mod tests {
     #[test]
     fn every_region_is_reachable() {
         let s = Sector::reach();
-        for b in 1..s.regions.len() {
+        for b in (1..s.regions.len()).filter(|&b| s.shown(b)) {
             assert!(!s.route(0, b).is_empty(), "{} unreachable", s.regions[b].name);
         }
+        let dawn = s.region_named("Aamunkoi").unwrap();
+        assert!(!s.shown(dawn) && s.route(0, dawn).is_empty(), "the story's region waits for its lane");
         assert_eq!(s.route(0, 0), Vec::<usize>::new());
         assert_eq!(s.route(0, 1), vec![1]);
     }

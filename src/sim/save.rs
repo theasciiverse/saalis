@@ -45,6 +45,12 @@ pub struct Save {
     /// the quests' progress (0.8), filled in by the app
     #[serde(default)]
     pub quests: Vec<super::quest::Saved>,
+    /// the quests' shared flags (0.9)
+    #[serde(default)]
+    pub flags: std::collections::BTreeMap<String, String>,
+    /// lanes the story opened (0.9)
+    #[serde(default)]
+    pub opened: Vec<(usize, usize)>,
 }
 
 /// Where saves live: `SAALIS_DATA_DIR`, or the state folder on Linux
@@ -135,6 +141,8 @@ impl World {
             body: self.body.clone(),
             items: self.items.clone(),
             quests: Vec::new(),
+            flags: self.flags.clone(),
+            opened: self.opened.clone(),
         })
     }
 
@@ -144,12 +152,20 @@ impl World {
             return None;
         }
         let mut w = World::new(s.seed);
-        if s.region >= w.sector.regions.len() || s.base >= w.sector.regions[s.region].bases.len() || s.markets.len() != w.markets.len() {
+        // a save from before the Reach grew has fewer markets: the new
+        // bases come last, and start fresh
+        if s.region >= w.sector.regions.len() || s.base >= w.sector.regions[s.region].bases.len() || s.markets.len() > w.markets.len() {
             return None;
         }
+        for &(a, b) in &s.opened {
+            w.sector.open_lane(a, b);
+        }
+        w.opened = s.opened;
+        w.flags = s.flags;
         w.enter_region(s.region);
         let laws: Vec<_> = w.sector.all_bases().iter().map(|&(r, b)| (w.sector.regions[r].bases[b].kind, w.sector.regions[r].owner, w.sector.regions[r].bases[b].black_market)).collect();
-        w.markets = s.markets.into_iter().zip(laws).map(|(m, (k, o, bm))| m.with_kind(k, o, bm)).collect();
+        let fresh = w.markets.split_off(s.markets.len());
+        w.markets = s.markets.into_iter().zip(laws).map(|(m, (k, o, bm))| m.with_kind(k, o, bm)).chain(fresh).collect();
         w.clock = s.clock;
         w.credits = s.credits;
         w.cargo = s.cargo;
@@ -164,8 +180,8 @@ impl World {
         w.next_mission = s.next_mission;
         w.body = s.body;
         w.items = s.items;
-        if s.war.control.len() == w.sector.regions.len() {
-            w.war = s.war;
+        if s.war.control.len() <= w.sector.regions.len() {
+            w.war = s.war.grown(&w.sector);
         }
         let class = ship::hull_named(&s.hull_class)?;
         let mut p = Ship::new(PLAYER, class, Side::Player, "you", w.bases[s.base].pos, 0.0);
@@ -255,5 +271,31 @@ mod tests {
         let mut s = w.to_save().unwrap();
         s.format = 999;
         assert!(World::from_save(s).is_none());
+    }
+
+    #[test]
+    fn a_save_from_the_smaller_reach_loads() {
+        // 0.8 had nine regions and seven bases
+        let mut w = World::new(9);
+        w.markets[1].stock[0] = 3.0;
+        let mut s = w.to_save().unwrap();
+        s.markets.truncate(7);
+        s.war.control.truncate(9);
+        s.war.garrison.truncate(9);
+        let w2 = World::from_save(s).expect("it loads");
+        assert_eq!(w2.markets.len(), w.markets.len());
+        assert_eq!(w2.markets[1].stock[0], 3.0);
+        assert_eq!(w2.war.control.len(), w2.sector.regions.len());
+    }
+
+    #[test]
+    fn opened_lanes_and_flags_are_kept() {
+        let mut w = World::new(9);
+        let dawn = w.sector.region_named("Aamunkoi").unwrap();
+        assert!(w.open_lane(1, dawn));
+        w.flags.insert("ending".into(), "coop".into());
+        let w2 = World::from_save(w.to_save().unwrap()).unwrap();
+        assert!(w2.sector.shown(dawn) && !w2.sector.route(0, dawn).is_empty());
+        assert_eq!(w2.flags.get("ending").map(String::as_str), Some("coop"));
     }
 }

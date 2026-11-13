@@ -1,0 +1,28 @@
+# A co-op side story (STORY.md). Names and lines are placeholders.
+
+title = "Thin Air"
+
+[people.kerttu]
+name = "Kerttu Lahja"
+glyph = "l"
+faction = "coop"
+base = "Lumi Farm"
+room = "hall"
+idle = "Breathe slow. We all are."
+
+[text]
+hook = "Lumi Farm's air plant is failing, and its chief is asking every pilot who lands."
+hello = "You can smell it, can't you? The scrubbers. Three of the six are down, and the farm makes the air for half the Reach. We need machinery to rebuild them, ten loads, and we needed it last week."
+ask = "Bring me ten machinery? The co-op will make it right."
+yes = "Ten machinery. I'll find it."
+no = "I can't now."
+fine = "Then pray somebody else can. We're not going anywhere."
+thanks = "Halla Refinery makes it, if the Crown will sell to you. Hurry."
+fetch = "Bring ten machinery to Kerttu Lahja at Lumi Farm."
+short = "That's not ten. We need all ten, or the stacks won't balance."
+fitted = "Ten. Bless you. My crew will have them in by the evening shift. ... One more thing. The restart runs the shields down for an hour, and the jumpers know it. Can you sit out over the farm until the stacks are lit?"
+guard = "Guard Lumi Field until the farm's air plant restarts."
+raid = "Raiders on the farm's approach! They'll hit the stacks while the shields are down!"
+left = "You've gone, and we're open. Come back out over Lumi Field."
+lit = "The stacks are lit. Smell that? That's air. The Reach owes you a breath."
+done = "Lumi Farm breathes again. 2500 cr paid."

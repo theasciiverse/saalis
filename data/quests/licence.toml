@@ -1,0 +1,29 @@
+# An Inner Customs side story (STORY.md). Names and lines are placeholders.
+
+title = "Licence Revoked"
+
+[people.marr]
+name = "Captain Vala Marr"
+glyph = "v"
+faction = "inner"
+base = "Gate Customs"
+room = "hall"
+idle = "The Charter isn't a suggestion, pilot."
+
+[text]
+hook = "Inner Customs' Captain Vala Marr at Gate Customs wants a pilot who isn't on anyone's payroll."
+hello = "You're the courier who's been flying everywhere lately. Sisu, Halla, Revontuli. Busy. Sit. I don't care what you carry, today. I care about a runner called Haukka Tuli, moving unlicensed AI cores out of Usva Deep."
+why = "Every core like that is a step back toward what we had before the Charter. Minds nobody answers for. My cutters can't follow him into the Deep; the Free Traders would call it an invasion. A freelancer, they'd only call a pirate."
+ask = "Knock him out, board him and bring me his cargo. Three thousand. Will you?"
+yes = "I'll bring you his cores."
+no = "Not my fight."
+fine = "Everything's your fight eventually. The offer stands."
+thanks = "Usva Deep. He runs with an escort. Don't let him reach a lane."
+hunt = "Find the core runner Haukka Tuli in Usva Deep. Knock it out, board it and bring its cargo of cores to Captain Vala Marr at Gate Customs."
+spotted = "That's Tuli. He's fast. Don't lose him."
+lost = "The runner's gone, cargo and all. He'll run again. Go back to the Deep."
+found = "A sealed crate stamped with no maker's mark: forty unlicensed cores, packed in gel."
+back = "Bring the crate of unlicensed cores to Captain Vala Marr at Gate Customs."
+done1 = "Forty of them. Each one smarter than this station. They'll be slagged by the evening."
+done2 = "And pilot. Whatever it is you're carrying for Dr. Halme, I'd like to see it one day. Before someone else does."
+done = "The core runner's cargo is in Customs' furnace. 3000 cr paid."

@@ -59,5 +59,24 @@ TOML data (see `CLAUDE.md`).
       with TOML casts, sandboxed; the game's first quest, The Jumped Claim;
       players' own quests from the save folder (`QUESTS.md`)
 
+## 0.9.0: the story begins
+
+Built 2026-11-13. The written story is in `STORY.md`.
+
+- [x] The quest engine grows for a story: other quests' progress
+      (`done`), shared flags, who holds a region, handing regions over,
+      opening lanes, an ending card, empty wrecks to salvage
+- [x] The Lantern, chapters 2 to 4: What Lies Under Kide, Cold Light,
+      The Ledger
+- [x] Side stories: Thin Air (co-op), Old Debts, Licence Revoked (Inner
+      Customs)
+- [x] More of the Reach: Tuisku Belt, Hopea Ring, Usva Deep, and
+      Aamunkoi waiting off the map
+- [x] Saves from 0.8 load into the bigger Reach
+
 ## 1.0.0
-- [ ] Written story, balance, full content
+
+- [ ] The Lantern's end: four choices, four endings, the new lane
+- [ ] The rest of the side stories: The Toll (Crown), Running Dry (Free
+      Traders)
+- [ ] Balance: a pass over pay, prices and fights with the story in

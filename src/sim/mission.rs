@@ -143,7 +143,7 @@ pub fn board(seed: u64, s: &Sector, region: usize, base: usize, clock: f64, memb
     let day = (clock / 24.0).floor() as u64;
     let mut rng = Rng::new(seed ^ (day.wrapping_mul(0x9E37_79B9) + (region as u64) * 131 + base as u64 * 7 + 1));
     let bases = s.all_bases();
-    let others: Vec<(usize, usize)> = bases.iter().copied().filter(|&(r, b)| (r, b) != (region, base)).collect();
+    let others: Vec<(usize, usize)> = bases.iter().copied().filter(|&(r, b)| (r, b) != (region, base) && s.shown(r)).collect();
     let hops = |to: usize| s.route(region, to).len() as f64;
     let mut id = || {
         *next_id += 1;
@@ -170,8 +170,8 @@ pub fn board(seed: u64, s: &Sector, region: usize, base: usize, clock: f64, memb
     }
     // the Watch's board: bounties where there is trouble, patrols at home
     let n = if members[1] { 2 } else { 1 };
-    let troubled: Vec<usize> = (0..s.regions.len()).filter(|&r| s.regions[r].threat > 0).collect();
-    let home: Vec<usize> = (0..s.regions.len()).filter(|&r| s.regions[r].owner == Faction::Coop).collect();
+    let troubled: Vec<usize> = (0..s.regions.len()).filter(|&r| s.shown(r) && s.regions[r].threat > 0).collect();
+    let home: Vec<usize> = (0..s.regions.len()).filter(|&r| s.shown(r) && s.regions[r].owner == Faction::Coop).collect();
     for _ in 0..n {
         if rng.chance(0.55) && !troubled.is_empty() {
             let r = troubled[rng.below(troubled.len() as u32) as usize];
@@ -190,7 +190,7 @@ pub fn board(seed: u64, s: &Sector, region: usize, base: usize, clock: f64, memb
     // the bar: a fixer some days, with something riskier
     let fixer = rng.chance(0.6).then(|| {
         let (name, line) = FIXERS[rng.below(FIXERS.len() as u32) as usize];
-        let wild: Vec<usize> = (0..s.regions.len()).filter(|&r| s.regions[r].threat >= 2).collect();
+        let wild: Vec<usize> = (0..s.regions.len()).filter(|&r| s.shown(r) && s.regions[r].threat >= 2).collect();
         let job = if rng.chance(0.5) && !wild.is_empty() {
             let r = wild[rng.below(wild.len() as u32) as usize];
             let need = 3 + rng.below(3);

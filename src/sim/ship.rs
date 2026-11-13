@@ -452,6 +452,8 @@ pub struct Ship {
     pub tag: Option<String>,
     /// something a quest put aboard, found in the hold when boarded
     pub item: Option<String>,
+    /// a quest's say on who is aboard (none on an old wreck)
+    pub crew: Option<u8>,
 }
 
 impl Ship {
@@ -482,6 +484,7 @@ impl Ship {
             disabled: false,
             tag: None,
             item: None,
+            crew: None,
         }
     }
 
